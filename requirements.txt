@@ -1,0 +1,37 @@
+# Bayut QA agentic system — Python dependencies
+# Python 3.11+ required (tomllib, modern typing).
+
+# --- Test execution -------------------------------------------------------
+pytest==8.3.4
+pytest-xdist==3.6.1              # parallel execution, one worker per device
+pytest-rerunfailures==15.0       # controlled retry ONLY for triage evidence, never to hide failures
+pytest-timeout==2.3.1            # bounded tests; a hung test yields no evidence
+
+# --- Appium / Android -----------------------------------------------------
+# Client 6.x pairs with Appium server 3.x. The 4.x line targets server 2.x — do not
+# downgrade without also downgrading the server. Verified against the installed
+# server 3.5.2 + uiautomator2 driver 8.1.0.
+Appium-Python-Client==6.0.0
+selenium==4.46.0                 # pulled in by the client; pinned so runs are reproducible
+
+# --- Test design ----------------------------------------------------------
+allpairspy==2.5.1                # covering arrays for tools/pairwise.py
+
+# --- API oracle / evidence ------------------------------------------------
+haralyzer==2.4.0                 # HAR parsing for oracle.py and har_diff.py
+mitmproxy==11.0.2                # capture + fault injection (also provides mitmdump)
+
+# --- Integrations ---------------------------------------------------------
+requests==2.32.3                 # Testmo + ClickUp REST clients
+tenacity==9.0.0                  # explicit, logged retry on network calls only
+
+# --- Config / IO ----------------------------------------------------------
+python-dotenv==1.0.1
+PyYAML==6.0.2                    # filter-inventory parameter blocks
+Pillow==11.0.0                   # screenshot annotation in evidence.py
+
+# --- Dev / quality --------------------------------------------------------
+ruff==0.8.4
+mypy==1.14.1
+types-requests==2.32.0.20241016
+types-PyYAML==6.0.12.20241230

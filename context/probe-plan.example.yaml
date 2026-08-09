@@ -1,0 +1,74 @@
+# Probe plan for tools/prober.py — PROBE mode.
+#
+# Copy to `context/probe-plan.yaml` and fill in with locators taken from
+# `context/element-inventory.json`, which the PASSIVE crawl produces. Do not write
+# locators from memory or from the web app: they must come from a real page-source dump
+# of the Android build under test.
+#
+# Validate before running against a device:
+#   python tools/prober.py validate-plan --plan context/probe-plan.yaml
+#
+# Every locator below is a hypothesis until a probe run resolves it on a live screen.
+# Anything the prober cannot find is reported UNRESOLVED, never guessed around.
+
+# The result-count element is the instrument for every probe. Identify it precisely:
+# if this is wrong, every verdict in filter-behaviour.md is wrong in the same direction.
+count_element:
+  strategy: resource-id        # accessibility id | resource-id | uiautomator | xpath
+  value: TODO                  # e.g. com.bayut.app:id/results_count
+
+# Optional: regex used to pull the number out of the count label.
+# The default handles "1,247 properties" and Arabic-Indic "١٬٢٤٧ عقار".
+count_pattern: '\d[\d,\s]*'
+
+filters:
+  property_type:
+    open:                      # control that opens the filter, if it is not already visible
+      strategy: accessibility id
+      value: TODO              # e.g. Filters
+    apply:                     # omit entirely if filters apply live — P2 will determine this
+      strategy: resource-id
+      value: TODO              # e.g. com.bayut.app:id/btn_apply_filters
+    reset:
+      strategy: resource-id
+      value: TODO              # e.g. com.bayut.app:id/btn_reset_filters
+    options:                   # at least two, or the filter cannot be probed
+      Apartment:
+        strategy: accessibility id
+        value: TODO
+      Villa:
+        strategy: accessibility id
+        value: TODO
+
+  # Pick two amenities that rarely co-occur — P3's AND/OR signal is strongest when the
+  # two sets barely overlap. Two near-universal amenities produce counts too close
+  # together to separate AND from OR, and the probe will correctly return UNRESOLVED.
+  amenities:
+    open:
+      strategy: accessibility id
+      value: TODO
+    options:
+      Private Pool:
+        strategy: accessibility id
+        value: TODO
+      Maids Room:
+        strategy: accessibility id
+        value: TODO
+
+  completion_status:
+    options:
+      Ready:
+        strategy: accessibility id
+        value: TODO
+      Off-Plan:
+        strategy: accessibility id
+        value: TODO
+
+  furnishing:
+    options:
+      Furnished:
+        strategy: accessibility id
+        value: TODO
+      Unfurnished:
+        strategy: accessibility id
+        value: TODO

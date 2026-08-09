@@ -1,0 +1,31 @@
+# Secrets
+.env
+
+# Run artifacts — large, per-run, not source of truth
+runs/*
+!runs/.gitkeep
+
+# Generated reports are reviewed then filed by a human; keep the dir, not the churn
+reports/*
+!reports/.gitkeep
+!reports/examples/
+
+# Captures
+*.har
+*.flow
+*.mp4
+*.png
+!templates/**/*.png
+!reports/examples/**/*.png
+
+# Page-source dumps written by locator-cartographer
+context/page_source/*.xml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

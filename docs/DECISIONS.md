@@ -1,0 +1,142 @@
+# Decisions Log
+
+Running record of design choices and why. Append, never rewrite — a reversed decision
+gets a new entry that supersedes the old one, so the reasoning trail survives.
+
+Format: `D-nnn · date · decision · rationale · consequence`.
+
+---
+
+## Phase 0
+
+### D-001 · 2026-08-09 · `context/` is the ground truth, not the app repo
+**Decision.** Every agent reads `context/*.md` for what the app does. No agent is ever
+given a path into the Bayut source tree.
+**Rationale.** Black-box independence is the value the QA team provides — we are the only
+check on AI-written code that does not share the code's assumptions. If our tests are
+derived from the implementation, they inherit its bugs.
+**Consequence.** `context/` accuracy is a hard dependency. Stale context produces
+confidently wrong agents. `locator-cartographer` and `suite-curator` are the maintenance
+mechanism; if they lapse, the system degrades quietly.
+
+### D-002 · 2026-08-09 · Everything unverified is marked, not omitted
+**Decision.** Inferred facts are written down and tagged `[ASSUMED — verify]`;
+unanswerable ones are written as `UNKNOWN — needs manual verification`.
+**Rationale.** An empty template gets ignored; a wrong-but-confident file gets trusted. A
+marked assumption gets corrected. It also makes the review cost of Phase 0 visible and
+bounded.
+**Consequence.** Agents must be instructed to refuse to build on `[ASSUMED — verify]`
+values for anything that reaches Testmo or a bug report.
+
+### D-003 · 2026-08-09 · Combinatorics live in `pairwise.py`, never in a prompt
+**Decision.** Covering arrays, coverage math, log trimming, HAR filtering, and set diffing
+are Python. Agents call them.
+**Rationale.** Models produce plausible-looking coverage sets that are neither minimal nor
+complete, and the error is invisible on inspection. Determinism here is also what makes
+results reproducible across runs — a prompt is not a stable artifact.
+**Consequence.** `tools/` must be genuinely runnable and independently testable against
+fixtures, which is why Phase 1 requires fixture-based proof before any device work.
+
+### D-004 · 2026-08-09 · `clickup_client.py` is structurally read-only
+**Decision.** No create/update method exists in the client at all — not disabled, not
+flag-guarded, absent.
+**Rationale.** "Agents never file tickets" enforced by policy will eventually be violated
+by a helpful agent. Enforced by the absence of a code path, it cannot be.
+**Consequence.** Duplicate detection works; filing stays human. Any future need to write
+to ClickUp is a deliberate, reviewed change, not a prompt away.
+
+### D-005 · 2026-08-09 · Filter inventory is machine-parseable YAML inside a Markdown file
+**Decision.** `filter-inventory.md` carries a fenced YAML parameter block that
+`pairwise.py` and `test-designer` consume verbatim.
+**Rationale.** Humans need the prose columns to correct the values; tools need structure.
+One file keeps them from diverging, which two files reliably would.
+**Consequence.** Editing the block requires care — a malformed constraint silently deletes
+valid combinations. `pairwise.py` therefore reports a row count and coverage stats so an
+over-broad constraint is visible.
+
+### D-006 · 2026-08-09 · Listing ID as the oracle key
+**Decision.** `oracle.py` matches API results to rendered results on listing ID.
+**Rationale.** Price/title matching is ambiguous across near-identical units in the same
+tower — exactly the case where a drop is most likely and least noticeable.
+**Consequence.** If listing IDs are not exposed anywhere in the UI, the strongest check we
+have degrades to fuzzy matching. This makes a UI-visible listing ID a top-3 item in
+`docs/ASKS.md`, alongside testIDs.
+
+### D-007 · 2026-08-09 · No hardcoded listing IDs in tests
+**Decision.** Tests select listings dynamically from the current result set.
+**Rationale.** We are likely testing against live production inventory, which mutates
+daily as agencies add and expire listings.
+**Consequence.** Tests are more complex and cannot assert on specific known content. This
+cost disappears the day we get a seeded test environment — an ask, not a given.
+
+### D-008 · 2026-08-09 · Retry exists to gather evidence, never to turn a run green
+**Decision.** `pytest-rerunfailures` is available, but a passing retry does not convert a
+failure into a pass. Both outcomes are recorded and the retry result is an *input* to
+`failure-triage`, which must still classify it.
+**Rationale.** Auto-retry that masks a real intermittent defect is worse than a red suite,
+because it destroys the signal we exist to provide. Retry outcome is genuinely useful
+triage evidence — a failure that survives retry is far more likely to be real.
+**Consequence.** Flake rate stays visible and is reported by `control-tower` as a
+first-class metric rather than being silently absorbed.
+
+## Phase 0.5 — context from the device, not from memory
+
+### D-009 · 2026-08-09 · `context/` is generated by crawling, not hand-written
+**Decision.** `app-cartographer` drives the live app and emits the context files. The
+Phase 0 hand-written versions are demoted to hypotheses; each line is confirmed or
+corrected and tagged `[OBSERVED <date> build <n>]` or `[UNRESOLVED]`.
+**Rationale.** Human recollection of filter semantics is wrong often enough to poison
+every downstream suite, and silently: a wrong constraint deletes valid combinations from
+the covering array and nothing in the output looks wrong. Supersedes the D-001 assumption
+that a human would author `context/`; D-001's principle (context, never the repo) stands.
+**Consequence.** Phase 1's remaining tools wait for the crawl, because the crawl decides
+whether `oracle.py` can match exactly or must degrade to fuzzy (D-006).
+
+### D-010 · 2026-08-09 · The safety guard is a shared module, not crawler-internal
+**Decision.** `tools/crawl_safety.py` is imported by both `crawler.py` and `prober.py`.
+**Rationale.** PROBE mode taps too — filter options, apply buttons, reset. Two tap paths
+means two places to audit and one place to forget. The guard is the single control
+preventing a real lead being sent to a real agency; it gets one implementation.
+**Consequence.** Slight deviation from "put the blocklist in crawler.py". The guard has
+its own `selftest`, run before every crawl session.
+
+### D-011 · 2026-08-09 · Default-deny, with UNCERTAIN as a first-class outcome
+**Decision.** Three verdicts: BLOCK (never tapped), ALLOW (tapped), UNCERTAIN (logged,
+tapped only under an explicit `--allow-uncertain-taps`). Block always beats allow, and no
+flag disables the blocklist.
+**Rationale.** A pure blocklist cannot know about a control it has never seen, and we
+have never seen this app. A pure allowlist would stop the first crawl dead. UNCERTAIN
+makes the unknown visible and puts a human in the loop: review
+`context/crawl-uncertain.md`, promote the safe patterns, crawl further.
+**Consequence.** The first crawl reaches less of the app than a permissive one would.
+That is the intended trade.
+
+### D-012 · 2026-08-09 · Screen fingerprints are structural (resource-id only)
+**Decision.** Screen identity hashes `resource-id` values only. A second "full"
+fingerprint additionally includes `content-desc`.
+**Rationale.** `content-desc` is a *localized* string — it is what TalkBack reads aloud —
+so including it made the same screen fingerprint differently in English and Arabic,
+breaking "same fingerprint means same screen" exactly where the cartographer needs it.
+Caught by the EN/AR fixtures disagreeing on the listing-detail page.
+**Consequence.** Cross-locale comparison is meaningful. Where the two fingerprints are
+identical, the screen carries no `content-desc` at all — which is simultaneously a
+TalkBack accessibility gap and a locator-quality finding, so it is reported.
+
+### D-013 · 2026-08-09 · Pinning is reported by a watchdog, not by the final report
+**Decision.** A background thread samples the mitmproxy flow file during the crawl and
+prints a verdict as soon as traffic appears, or at 5 minutes if none has.
+**Rationale.** Certificate pinning blocks `oracle.py` and `har_diff.py` — the most
+differentiated part of this design. Learning that after a 40-minute crawl wastes a
+session; learning it in minute five changes what we do that day.
+**Consequence.** The verdict is `PINNING_SUSPECTED`, never `PINNING_CONFIRMED`: zero
+traffic is also consistent with non-HTTP transport or a misconfigured proxy. Confirmation
+is a two-step human check, printed with the warning.
+
+### D-014 · 2026-08-09 · PREVENTED, ALLOWED_EMPTY and CONSTRAINT_WRONG stay distinct
+**Decision.** `prober.py` P4 returns three separate verdicts for an attempted invalid
+combination, and never collapses them.
+**Rationale.** "Greyed out" is a real pairwise constraint. "Selectable but returns zero"
+is a valid empty-state test case. Treating the second as a constraint deletes it from
+every generated suite forever, and no one notices because the suite still looks full.
+**Consequence.** Constraint lists in `filter-inventory.md` shrink after probing. That is
+the correct direction — most assumed constraints turn out to be ALLOWED_EMPTY.

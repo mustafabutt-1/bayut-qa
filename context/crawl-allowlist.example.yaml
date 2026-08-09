@@ -1,0 +1,51 @@
+# Crawl safety rule extensions.
+#
+# Copy to `context/crawl-allowlist.yaml` to activate. It is deliberately NOT active by
+# default: an inactive file cannot silently widen what the crawler is willing to tap.
+#
+# This file may only ADD rules. There is no mechanism to remove a default block rule —
+# see tools/crawl_safety.py. If a default block rule is wrong, fix it in code, in review.
+#
+# Workflow:
+#   1. Run a STRICT crawl. Most elements come back UNCERTAIN and are not tapped.
+#   2. Read context/crawl-uncertain.md.
+#   3. For each element, decide: allow (safe navigation), block (consequential), or
+#      leave (let it stay uncertain — a missed screen is cheap).
+#   4. Add rules here. Re-run. The crawl reaches further, still under the same guard.
+#
+# Match fields: text, content_desc, resource_id, klass, package, any_field
+#   any_field matches text, content_desc and resource_id joined together.
+# All patterns are case-insensitive `re.search`, tested against both the raw value and a
+# word-normalised variant (so `_`, `-`, `.`, `:` behave as word separators).
+#
+# Verify every change before crawling:
+#   python tools/crawl_safety.py --config context/crawl-allowlist.yaml rules
+#   python tools/crawl_safety.py --config context/crawl-allowlist.yaml selftest
+#   python tools/crawl_safety.py --config context/crawl-allowlist.yaml check \
+#       --page-source context/page_source/<screen>.xml
+
+version: 1
+
+allow:
+  # Example — replace with real Bayut identifiers once the first crawl reports them.
+  # - id: ALLOW-BAYUT-LISTING-CARD
+  #   category: results
+  #   reason: "Opens a listing detail page. Read-only, reversible with back."
+  #   match:
+  #     resource_id: "com\\.bayut\\.[a-z]+:id/(listing|property)_card"
+  #
+  # - id: ALLOW-BAYUT-FILTER-SHEET
+  #   category: filters
+  #   reason: "Filter sheet controls. No outbound effect."
+  #   match:
+  #     resource_id: "com\\.bayut\\.[a-z]+:id/filter_"
+
+block:
+  # Anything the crawl discovers that is consequential and NOT already covered by the
+  # defaults. Adding here is always safe; removing from the defaults is not possible.
+  #
+  # - id: BLOCK-BAYUT-REQUEST-VIEWING
+  #   category: lead_contact
+  #   reason: "Bayut-specific viewing request; reaches an agent."
+  #   match:
+  #     resource_id: "com\\.bayut\\.[a-z]+:id/btn_request_viewing"
