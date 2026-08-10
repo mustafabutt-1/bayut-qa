@@ -29,6 +29,53 @@ import os
 import pytest
 
 
+def _ensure_first_listing_favourited(properties_screen, home_screen) -> str:
+    """Favourite the first listing and PROVE it, retrying once if the tap toggled it off.
+
+    The heart is a toggle, not an "ensure", and its state cannot be read from the card:
+
+      * `favourite_cb.checked` stays False whether or not the listing is favourited
+        (D-031, re-confirmed 2026-08-11), so there is nothing on the card to inspect.
+      * `favourite_nth_listing()` relies on a "Remove property from Favourites?" dialog
+        to detect the already-favourited case. OBSERVED 2026-08-11: **that dialog does
+        not appear.** Tapping an already-favourited listing removes it silently.
+
+    So a single tap on a listing left favourited by an earlier run REMOVES it, and the
+    persistence assertion then fails for a reason that has nothing to do with
+    persistence — which is exactly the false defect this checklist item must not
+    produce. Favourites accumulate across runs, so this is the normal case, not an edge
+    one.
+
+    Verifying here also sharpens the test: it now separately establishes "the favourite
+    was recorded" and "it survived the relaunch", instead of conflating the two.
+    """
+    for attempt in (1, 2):
+        price = properties_screen.favourite_nth_listing(0)
+        assert price is not None, "could not read the listing's price to cross-check"
+
+        favourites = home_screen.open_more().open_favourites()
+        favourites.wait_for_first_card(timeout=20)
+        recorded = favourites.is_present(text=price, timeout=10)
+
+        # Favourites is a nested full-screen activity with NO bottom nav, so nothing
+        # here may call open_more()/open_properties() directly — go back to More the
+        # way the screen object does, exactly as the assertions further down do.
+        more_again = favourites.go_back()
+        if recorded:
+            return price
+
+        assert attempt == 1, (
+            f"favourited the first listing ({price!r}) twice and it is still not on the "
+            f"Favourites screen. The heart is toggling but nothing is being recorded — "
+            f"that is a real finding, not a test-setup problem."
+        )
+        # The tap removed it (it was already favourited). Return to results and re-tap.
+        # Safe from More — unlike Favourites, More has the bottom nav.
+        assert more_again.is_displayed(), "expected to be back on More after Favourites"
+        properties_screen = home_screen.open_properties()
+    raise AssertionError("unreachable")
+
+
 def test_favourites_and_viewed_activity_persist_across_relaunch(properties_screen, home_screen):
     more = home_screen.open_more()
     if more.is_signed_in():
@@ -47,8 +94,8 @@ def test_favourites_and_viewed_activity_persist_across_relaunch(properties_scree
     # first_listing_price() call beforehand — confirmed live: production's result
     # order can shift between two separate page_source reads, which previously made
     # this test favourite one listing while cross-checking the price of another.
-    price = properties_screen.favourite_nth_listing(0)
-    assert price is not None, "could not read the listing's price to cross-check after relaunch"
+    price = _ensure_first_listing_favourited(properties_screen, home_screen)
+    properties_screen = home_screen.open_properties()
 
     dpv = properties_screen.open_first_listing()
     assert dpv.is_displayed()

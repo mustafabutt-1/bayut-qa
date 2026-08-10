@@ -645,3 +645,26 @@ lookahead always passed. Only the word-normalised candidate would have been excl
 the raw one matched first. `(?!ed)` is the fix. Six selftest cases now pin both directions:
 Contacted / contacted_rb / "Viewed and Contacted" must NOT block; Contact / Contact Agent /
 Contacting agent / Contact Us / btn_contact_agent must. 119 -> 125 assertions.
+
+### D-040 · 2026-08-11 · The favourite heart is a toggle, and its state is unreadable — verify, never assume
+**Decision.** Tests that need a listing favourited must *prove* it via the Favourites
+screen and re-tap once if the first tap removed it, rather than trusting a single tap.
+**Rationale.** Two independent signals were checked live and both are dead ends:
+`favourite_cb.checked` stays False whether or not the listing is favourited (D-031's
+observation, re-confirmed), and the "Remove property from Favourites?" confirmation that
+`favourite_nth_listing()` relies on to detect the already-favourited case **does not
+appear** — tapping an already-favourited listing removes it silently. So the card offers
+nothing to inspect and the tap is a plain toggle.
+**Consequence.** Favourites accumulate across runs, so "the listing is already
+favourited" is the *normal* state on any device that has run this suite before, not an
+edge case. A single tap then removes it and the persistence assertion fails for a reason
+unrelated to persistence — precisely the false defect that checklist item exists to
+avoid. `_ensure_first_listing_favourited()` in 03_app_override taps, verifies on the
+Favourites screen, and retries once; a second failure is reported as a real finding
+("the heart is toggling but nothing is being recorded"). This also sharpens the test:
+"the favourite was recorded" and "it survived the relaunch" are now established
+separately instead of being conflated.
+
+Note: this narrows D-031 rather than replacing it. D-031's core finding — that the heart
+needs a real coordinate tap because `.click()` does nothing — still holds. What does not
+hold is the idempotency mechanism built on top of it.
