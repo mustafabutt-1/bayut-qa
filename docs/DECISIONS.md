@@ -572,3 +572,37 @@ is a valid empty-state test case. Treating the second as a constraint deletes it
 every generated suite forever, and no one notices because the suite still looks full.
 **Consequence.** Constraint lists in `filter-inventory.md` shrink after probing. That is
 the correct direction — most assumed constraints turn out to be ALLOWED_EMPTY.
+
+## Guardrails — production testing
+
+### D-015 · 2026-08-09 · The environment is production by default, in code
+**Decision.** `SafetyPolicy` defaults to `environment="production"`, and so does every
+tool. Staging requires an explicit `--environment staging`. No auto-detection.
+**Rationale.** The QA lead's instruction was to treat it as production until told
+otherwise, and the regression checklist itself states regression builds use production
+configuration across the board. A default that must be remembered is a default that gets
+forgotten on the one run where it matters.
+**Consequence.** Every generated report records the environment in its header. Automation
+on production is read-path automation, and that limit should be stated plainly rather
+than papered over.
+
+### D-016 · 2026-08-09 · Data creation is blocked by environment, not by discipline
+**Decision.** Eleven `PROD-BLOCK-*` rules block sign-up, saved searches, favourites,
+TruEstimate generation, Portfolio, claims, seller leads, BayutGPT, profile edits and
+sharing while the environment is production. They lift on staging.
+**Rationale.** "Do not create data" as a policy survives until someone writes a test that
+needs to. Encoded as rules, the failure mode is a loud refusal rather than a polluted
+production account.
+**Consequence.** The rules separate the write from the destination: the Favourites tab
+stays reachable, the favourite heart does not. Blocking destinations too would make half
+the app unmappable for no safety gain, so seven selftest cases assert that distinction.
+
+### D-017 · 2026-08-09 · The lead exemption reads the screen; the caller cannot assert
+**Decision.** Lead controls are blocked everywhere. The single exemption is
+`policy.lead_test(elements)`, which parses the live page source and finds an allowlisted
+agency itself. `LEAD_TEST_AGENCIES = ("Explorer Real Estate",)`.
+**Rationale.** An API shaped `lead_test(agency="Explorer Real Estate")` lets a caller's
+stale assumption send an enquiry to a real brokerage. Making the gate do its own
+observation applies "evidence over inference" to the most expensive action in the system.
+**Consequence.** Scoped to a context manager, covers `lead_contact` rules only, cannot
+leak past the block — all asserted in the selftest. Crawler and prober never call it.

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -662,7 +663,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     opts.no_reset = True  # probing needs the session and search state the crawl left behind
     driver = webdriver.Remote(os.environ.get("APPIUM_SERVER_URL", "http://127.0.0.1:4723"),
                               options=opts)
-    policy = SafetyPolicy.load(args.safety_config, app_package=args.package, permissive=False)
+    policy = SafetyPolicy.load(args.safety_config, app_package=args.package,
+                               permissive=False, environment=args.environment)
     prober = Prober(plan, policy, driver, max_actions=args.max_actions)
     requested = [p.strip().upper() for p in args.probes.split(",") if p.strip()]
     try:
@@ -698,6 +700,9 @@ def build_parser() -> argparse.ArgumentParser:
                     "is the instrument; raw counts are always recorded alongside verdicts.",
     )
     p.add_argument("--safety-config", default=None)
+    p.add_argument("--environment", choices=["production", "staging"],
+                   default=os.environ.get("TEST_ENVIRONMENT", "production"),
+                   help="PRODUCTION by default; adds the data-creation blocklist")
     sub = p.add_subparsers(dest="command", required=True)
 
     st = sub.add_parser("selftest", help="verify the inference math with no device")

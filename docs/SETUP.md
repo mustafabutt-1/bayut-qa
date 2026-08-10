@@ -140,7 +140,7 @@ This is the gate. Run all four; all four must pass.
 
 ```bash
 python tools/crawl_safety.py selftest
-#   expect: 65/65 assertions passed
+#   expect: 117/117 assertions passed
 #           "Blocklist and allowlist behave as specified. Safe to crawl."
 
 python tools/prober.py selftest
@@ -254,7 +254,7 @@ python tools/adb.py proxy clear
 appium --port 4723 --allow-insecure=uiautomator2:adb_shell &
 mitmdump -w runs/crawl-01/capture.flow &
 
-python tools/crawl_safety.py selftest        # 67/67 or stop
+python tools/crawl_safety.py selftest        # 117/117 or stop
 
 python tools/crawler.py crawl \
     --package $BAYUT_APP_PACKAGE \
@@ -293,7 +293,7 @@ python tools/crawler.py crawl \
 
 You are ready when all of these are true:
 
-- [ ] `crawl_safety.py selftest` → 65/65
+- [ ] `crawl_safety.py selftest` → 117/117
 - [ ] `prober.py selftest` → 28/28
 - [ ] `crawler.py offline` → 7 reports written
 - [ ] The dangerous fixture shows Call / WhatsApp / Email / Share / Report all **BLOCK**

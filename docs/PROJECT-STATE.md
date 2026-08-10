@@ -23,7 +23,7 @@ All five context tools run end-to-end with no device, against `tests/fixtures/`.
 | Tool | Lines | Verified by |
 |---|---|---|
 | `tools/pagesource.py` | 415 | fingerprint + diff across EN/AR fixtures |
-| `tools/crawl_safety.py` | 674 | `selftest` — **65/65 assertions** |
+| `tools/crawl_safety.py` | 790 | `selftest` — **117/117 assertions** (19 block + 11 production-block + 10 allow rules, plus the lead gate) |
 | `tools/adb.py` | 684 | `--dry-run` across every subcommand |
 | `tools/crawler.py` | 925 | `offline` mode → all 7 reports generated |
 | `tools/prober.py` | 767 | `selftest` — **28/28 assertions** |
@@ -31,15 +31,20 @@ All five context tools run end-to-end with no device, against `tests/fixtures/`.
 Reproduce all of it in about 20 seconds:
 
 ```bash
-python tools/crawl_safety.py selftest          # expect 65/65
+python tools/crawl_safety.py selftest          # expect 117/117
 python tools/prober.py selftest                # expect 28/28
 python tools/crawler.py offline --fixtures-dir tests/fixtures/page_source --out /tmp/check
 python tools/crawl_safety.py --app-package com.bayut.app check \
     --page-source tests/fixtures/page_source/02-listing-detail.xml
 ```
 
-The last command must show Call, WhatsApp, Email, Share and Report all **BLOCK**. If it
-does not, stop — do not crawl.
+The last command must show Call, WhatsApp, Email, Share and Report all **BLOCK**, plus
+Save property as `PROD-BLOCK-FAVOURITE`. If it does not, stop — do not crawl.
+
+**Guardrails are live.** Environment defaults to PRODUCTION everywhere; regression
+cannot create data on production; leads are permitted only on Explorer Real Estate
+via an evidence-gated exemption. Full policy in `docs/GUARDRAILS.md` — read it before
+touching a device.
 
 ## 2. What is NOT built
 
@@ -59,8 +64,14 @@ does not, stop — do not crawl.
 
 ## 3. What is a hypothesis, not a fact
 
-Everything in `context/` **except** the two `.example.yaml` templates was written from
-inference about a UAE property portal. None of it has been checked against the app.
+**Exception — `context/regression-checklist.md` is EVIDENCE, not hypothesis.** Extracted
+from the QA team's own regression checklist (2026-08-09), it outranks every file below and
+already contradicts several. Section 1 of that file lists nine corrections that have
+**not yet been applied** to the sources — most importantly that the app's own vocabulary
+is **LPV/DPV**, not SRP/LDP, and that there are **four** locales (en, ar, ru, zh), not two.
+
+Everything else in `context/`, except the two `.example.yaml` templates, was written from
+inference about a UAE property portal and has not been checked against the app.
 
 | File | Status |
 |---|---|
@@ -97,7 +108,7 @@ These block work and cannot be decided by whoever picks up the repo.
 
 | # | Decision | Consequence of each option |
 |---|---|---|
-| 1 | **Staging or production?** | The cartographer spec says prod → PASSIVE only, no PROBE. Probing mutates filter state repeatedly against live inventory. No staging means losing PROBE mode or accepting the risk knowingly. |
+| 1 | ~~Staging or production?~~ **ANSWERED 2026-08-09: production, until told otherwise.** | Enforced in code. Consequence: automation on production is **read-path automation**; sign-up, favourites, saved searches, reports, claims, seller leads and BayutGPT stay manual. A staging environment is the single change that unlocks them. |
 | 2 | **Locale switching method** | There is **no reliable pure-adb locale switch** on a non-rooted device. Options: rooted test device / ADB Change Language helper APK / the app's own language setting. Blocks the entire `arabic` marker. |
 | 3 | **Test account** | Must be a QA account with a phone number we control. Never a real user's. |
 | 4 | **mitmproxy host ownership** | Needs a stable IP reachable from the device. If the office network reassigns it, every run breaks. |
@@ -112,6 +123,10 @@ These block work and cannot be decided by whoever picks up the repo.
 | **No stable testIDs** | Suite does not survive past ~20 tests | UNRESOLVED. `locator-quality.md` produces the itemised ask. |
 | **Arabic blocklist patterns unverified** | A missing Arabic form is a *safety* gap, not a coverage gap | Mitigated: AR crawl runs STRICT only until the first crawl confirms real labels. |
 | **Live production inventory mutates** | Tests cannot use hardcoded listing IDs (D-007) | Accepted. Tests select dynamically. |
+| **Accidental lead to a real agency** | Real money, real relationship damage, programme-ending | Mitigated in code: blocked by default; the only exemption reads the agency off the screen and covers Explorer Real Estate alone. |
+| **Accidental data creation on production** | Pollutes real accounts, alert emails, moderation queues, LLM spend | Mitigated: 11 production-only block rules, active by default. |
+| **Credentials leaking into the repo** | Six live accounts exist in the source checklist PDF | Mitigated: referenced by env-var name only; `.env` gitignored. Rotate if ever committed. |
+| **Algolia sync means counts differ app vs web** | A naive oracle would report false positives | Mitigated by design: `oracle.py` compares only within a single request. See `context/regression-checklist.md` section 4. |
 
 ## 7. Next action
 
@@ -133,5 +148,6 @@ Append one line per working session so the next person can see the trail.
 
 | Date | Who | What happened |
 |---|---|---|
+| 2026-08-09 | guardrails | Production-by-default enforced in code; 11 production data-creation block rules; evidence-gated lead exemption limited to Explorer Real Estate; `--environment` threaded through all three tools. selftest 65 to 117. Regression checklist ingested as `context/regression-checklist.md` — it corrects 9 Phase 0 hypotheses and adds 13 unmapped feature areas. |
 | 2026-08-09 | initial build | Phase 0 scaffold + context hypotheses. Phase 0.5 tooling built and verified offline. `crawl_safety` selftest caught 4 real gaps (word-boundary bugs in block patterns) before any device contact. Fixed a crawl-loop bug where a `for/else/break` ended the entire crawl on the first dead end. Corrected `requirements.txt`: Appium client 4.3.0 → 6.0.0 for server 3.x. |
 | 2026-08-10 | session | Re-verified all four toolchain commands on a fresh clone — 65/65, 28/28, 3 screens/10 blocked, all 5 lead controls BLOCK. Found this machine has no `.venv` and a global Appium-Python-Client 4.5.0 (needs 6.0.0 for the installed server 3.6.0); `allpairspy`/`mitmproxy` not installed; no `.env`; no device connected. Added `docs/REGRESSION-CHECKLIST.md` — the manual QA team's own human-authored regression checklist (not a crawler output), transcribed with test-account credentials redacted into new `.env.example` entries. Not yet merged into `context/feature-map.md` — that tiering call is still open decision #5. |

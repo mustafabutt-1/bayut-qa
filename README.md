@@ -65,7 +65,7 @@ is no second tap path and no flag that disables the blocklist.
 **Run this before every crawl session:**
 
 ```bash
-python tools/crawl_safety.py selftest        # must be 65/65
+python tools/crawl_safety.py selftest        # must be 117/117
 ```
 
 And confirm the guard against the known-dangerous fixture:
@@ -109,7 +109,7 @@ when given fixture paths.
 | Tool | What it does | Verify it |
 |---|---|---|
 | [`pagesource.py`](tools/pagesource.py) | XML → elements, locators, stability, fingerprints | `parse`, `fingerprint`, `diff` |
-| [`crawl_safety.py`](tools/crawl_safety.py) | The tap guard. 19 block + 10 allow rules, EN & AR | `selftest` → 65/65 |
+| [`crawl_safety.py`](tools/crawl_safety.py) | The tap guard. 19 block + 10 allow rules, EN & AR | `selftest` → 117/117 |
 | [`adb.py`](tools/adb.py) | Device, app state, locale, deep links, proxy, capture | `--dry-run` on any subcommand |
 | [`crawler.py`](tools/crawler.py) | PASSIVE crawl → 7 context reports | `offline`, `plan` |
 | [`prober.py`](tools/prober.py) | PROBE P1–P7 → filter behaviour from count deltas | `selftest` → 28/28 |

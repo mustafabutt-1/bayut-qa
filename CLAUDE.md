@@ -25,6 +25,22 @@ tree — half of what looks present is a hypothesis awaiting verification.
 6. **Fail loud.** No silent retries. No auto-healing that masks a regression.
 7. **If evidence contradicts the test's own assertion, it is a TEST DEFECT, not a bug.**
 
+## Environment and data — non-negotiable
+
+**The environment is PRODUCTION until a human says otherwise, every time.** No
+auto-detection, no inference. Opting out is explicit: `--environment staging`.
+
+- **Regression must not create data on production.** 11 production-only block rules
+  cover sign-up, saved searches, favourites, TruEstimate reports, Portfolio, claims,
+  seller leads, BayutGPT, profile edits and sharing. Read-only destinations stay open.
+- **Leads only on `Explorer Real Estate`** (Bayut's demo agency), via
+  `policy.lead_test(elements)`, which reads the agency off the screen itself. Test
+  location is `Al Napoca`. Crawler and prober never generate leads at all.
+- **No credentials in this repo, ever.** They live in `.env`, referenced by name.
+  The regression-checklist PDF has six live accounts in it — none belong here.
+
+Full policy: `docs/GUARDRAILS.md`.
+
 ## Driving the live app — non-negotiable
 
 The app is production, signed in with a real test account. Tapping a contact-agent
@@ -33,7 +49,7 @@ damage, and the one mistake that ends this programme.
 
 - Every tap in `crawler.py` and `prober.py` goes through `crawl_safety.SafetyPolicy`.
   There is no second tap path and no flag that disables the blocklist.
-- Run `python tools/crawl_safety.py selftest` before every crawl session. Must be 65/65.
+- Run `python tools/crawl_safety.py selftest` before every crawl session. Must be 117/117.
 - STRICT by default: an element matching no allow rule is logged, not tapped.
 - Screenshot before every tap. Max 1 action / 800ms. Hard stop at 400 actions.
 - Uncertain? Do not tap. A missed screen is cheap; a hundred spurious leads is not.
@@ -44,6 +60,8 @@ damage, and the one mistake that ends this programme.
 | File | What it answers |
 |---|---|
 | **`docs/PROJECT-STATE.md`** | **Where are we? What is built? What is next?** Start here. |
+| **`docs/GUARDRAILS.md`** | **Production policy: environment, data creation, leads.** Binding. |
+| `context/regression-checklist.md` | The team's own regression checklist — evidence that outranks every hypothesis. |
 | `docs/PROMPTS.md` | Copy-paste session prompts — onboarding, crawl, review, probe, build. |
 | `docs/REGRESSION-CHECKLIST.md` | The manual QA team's own regression checklist — human-authored, not a crawler output. High-trust cross-check for `context/feature-map.md`. |
 | `docs/SETUP.md` | How do I get this running on a new machine? |

@@ -37,7 +37,9 @@ Read these, in this order:
   2. docs/PROJECT-STATE.md        — what is real vs. what is a hypothesis
   3. docs/ARCHITECTURE.md         — how the system works and why
   4. .claude/agents/README.md     — which agents exist, which are pending
-  5. docs/DECISIONS.md            — why things were decided the way they were
+  5. docs/GUARDRAILS.md           — production policy: environment, data, leads. BINDING
+  6. context/regression-checklist.md — the team's own checklist; evidence, not guesswork
+  7. docs/DECISIONS.md            — why things were decided the way they were
 
 Critical: do NOT infer project status from the file tree. Roughly half of what looks
 finished is deliberately a hypothesis awaiting verification against the real app.
@@ -53,8 +55,9 @@ real output — do not summarise, do not assume:
   python tools/crawl_safety.py --app-package com.bayut.app check \
       --page-source tests/fixtures/page_source/02-listing-detail.xml
 
-Expected: 65/65, 28/28, 3 screens with 10 blocked, and Call/WhatsApp/Email/Share/Report
-all showing BLOCK. If the fourth does not show all five as BLOCK, say so loudly and stop
+Expected: 117/117, 28/28, 3 screens with 12 blocked, and Call/WhatsApp/Email/Share/Report
+all showing BLOCK (plus Save property as PROD-BLOCK-FAVOURITE, since the environment
+defaults to production). If the fourth does not show all five as BLOCK, say so loudly and stop
 — that guard is the only thing preventing real leads being sent to real estate agencies.
 
 Also check the environment and tell me what is missing:
@@ -108,7 +111,7 @@ Read first: CLAUDE.md, docs/PROJECT-STATE.md, .claude/agents/app-cartographer.md
 especially the SAFETY section.
 
 Before anything touches the device:
-  1. python tools/crawl_safety.py selftest      — must be 65/65, otherwise STOP
+  1. python tools/crawl_safety.py selftest      — must be 117/117, otherwise STOP
   2. adb devices -l                             — exactly one device, state "device"
   3. Get the real package name: adb shell pm list packages | grep -i bayut
      Note: com.bayut.app throughout this repo is a PLACEHOLDER, not verified.
@@ -316,7 +319,7 @@ A new Bayut build shipped. Detect what changed before it breaks the suite.
 Read: .claude/agents/app-cartographer.md (Re-running section).
 
   1. python tools/adb.py info --package <real package>   — record the new build version
-  2. python tools/crawl_safety.py selftest               — 65/65 or stop
+  2. python tools/crawl_safety.py selftest               — 117/117 or stop
   3. Re-run the crawl into a fresh output directory, same locale and settings as the
      baseline so the comparison is fair
   4. Diff structurally against the previous dumps:

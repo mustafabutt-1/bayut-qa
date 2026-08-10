@@ -241,6 +241,7 @@ class CrawlConfig:
     action_interval: float = MIN_ACTION_INTERVAL_S
     permissive: bool = False
     safety_config: str | None = None
+    environment: str = "production"
     mitm_flow_file: Path | None = None
     settle_seconds: float = 2.0
     preserve_app_state: bool = False
@@ -256,7 +257,8 @@ class Crawler:
                              f"(bot-detection guard)")
         self.cfg = cfg
         self.policy = SafetyPolicy.load(cfg.safety_config, app_package=cfg.package,
-                                        permissive=cfg.permissive)
+                                        permissive=cfg.permissive,
+                                        environment=cfg.environment)  # type: ignore[arg-type]
         self.model = CrawlModel()
         self.adb = Adb(cfg.serial)
         self.driver: Any = None
@@ -405,6 +407,7 @@ class Crawler:
                 "package": self.cfg.package,
                 "locale": self.cfg.locale,
                 "mode": "PERMISSIVE" if self.cfg.permissive else "STRICT",
+                "environment": self.cfg.environment,
                 "max_actions": self.cfg.max_actions,
                 "max_depth": self.cfg.max_depth,
             }
@@ -599,6 +602,7 @@ def _header(model: CrawlModel, title: str) -> str:
         f"- App: {app.get('package', 'UNKNOWN')} "
         f"v{app.get('version_name', 'UNKNOWN')} ({app.get('version_code', 'UNKNOWN')})\n"
         f"- Locale: {m.get('locale', 'UNKNOWN')}\n"
+        f"- Environment: {str(m.get('environment', 'UNKNOWN')).upper()}\n"
         f"- Safety mode: {m.get('mode', 'UNKNOWN')}\n"
         f"- Actions used: {model.actions_used} / {m.get('max_actions', ACTION_CAP)}\n"
         f"- Stopped because: {model.stopped_reason}\n"
@@ -829,6 +833,7 @@ def crawl_offline(fixtures_dir: Path, out_dir: Path, *, policy: SafetyPolicy,
     model.meta = {
         "started": _now(), "finished": _now(), "locale": locale,
         "mode": "OFFLINE (" + ("PERMISSIVE" if policy.permissive else "STRICT") + ")",
+        "environment": policy.environment,
         "max_actions": 0, "pinning_verdict": "N/A — offline",
         "app": {"package": policy.app_package or "UNKNOWN", "version_name": "OFFLINE"},
     }
@@ -871,7 +876,8 @@ def crawl_offline(fixtures_dir: Path, out_dir: Path, *, policy: SafetyPolicy,
 def _cmd_plan(args: argparse.Namespace) -> int:
     """Show what a crawl would do on one screen, without touching the device."""
     policy = SafetyPolicy.load(args.safety_config, app_package=args.package,
-                               permissive=args.allow_uncertain_taps)
+                               permissive=args.allow_uncertain_taps,
+                               environment=args.environment)
     elements = parse_page_source(Path(args.page_source).read_text(encoding="utf-8", errors="replace"))
     targets = tappable(elements)
     parts = policy.partition(targets)
@@ -890,7 +896,8 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 
 def _cmd_offline(args: argparse.Namespace) -> int:
     policy = SafetyPolicy.load(args.safety_config, app_package=args.package,
-                               permissive=args.allow_uncertain_taps)
+                               permissive=args.allow_uncertain_taps,
+                               environment=args.environment)
     model = crawl_offline(Path(args.fixtures_dir), Path(args.out), policy=policy, locale=args.locale)
     written = write_reports(model, Path(args.out))
     print(f"screens   : {len(model.screens)}")
@@ -908,6 +915,7 @@ def _cmd_crawl(args: argparse.Namespace) -> int:
         locale=args.locale, out_dir=Path(args.out), artifacts_dir=Path(args.artifacts),
         max_actions=args.max_actions, max_depth=args.max_depth,
         permissive=args.allow_uncertain_taps, safety_config=args.safety_config,
+        environment=args.environment,
         mitm_flow_file=Path(args.mitm_flow_file) if args.mitm_flow_file else None,
         preserve_app_state=args.preserve_app_state,
         bootstrap_path=(
@@ -944,6 +952,10 @@ def build_parser() -> argparse.ArgumentParser:
                     f"the crawl stops hard at {ACTION_CAP} actions.",
     )
     p.add_argument("--safety-config", default=None, help="YAML allow/block extensions")
+    p.add_argument("--environment", choices=["production", "staging"],
+                   default=os.environ.get("TEST_ENVIRONMENT", "production"),
+                   help="PRODUCTION by default and until told otherwise; adds the "
+                        "data-creation blocklist")
     p.add_argument("--allow-uncertain-taps", action="store_true",
                    help="PERMISSIVE mode: tap elements that match no allow rule (supervised only)")
     sub = p.add_subparsers(dest="command", required=True)
