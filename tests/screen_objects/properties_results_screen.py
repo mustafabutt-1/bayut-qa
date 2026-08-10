@@ -29,6 +29,77 @@ class PropertiesResultsScreen(BaseScreen):
     LEAD_WHATSAPP = "com.bayut.bayutapp:id/btn_whatsapp"
     FAVOURITE_CHECKBOX = "com.bayut.bayutapp:id/favourite_cb"
 
+    # --- §16 LPV inline widgets -------------------------------------------
+    # Matched on visible text / content-desc / resource-id, NOT on a known widget id:
+    # the crawl's page-source dumps are gitignored, so the container ids for these
+    # widgets have never been observed here. Text matching is locale-fragile — these
+    # only hold in English. Replace each with its resource-id after the first live run
+    # prints them (see test_inline_widgets.py, which reports what it actually matched).
+    # [UNVERIFIED — replace with resource-ids]
+    INLINE_WIDGET_MARKERS: dict[str, str] = {
+        "TruBroker": r"tru\s*broker",
+        "BayutGPT": r"bayut\s*gpt",
+        "TruEstimate": r"tru\s*estimate",
+        "Dubai Transactions": r"dubai\s*transaction",
+        "Alert Me of New Properties": r"alert\s*me\s*of\s*new",
+        "Off-Plan rail": r"off[\s\-_]?plan",
+    }
+
+    # Checklist §16: documented positions, i.e. the widget appears after the Nth
+    # listing. Used for relative-order assertions, not absolute indexing — see
+    # observed_widget_order().
+    DOCUMENTED_WIDGET_ORDER: tuple[str, ...] = (
+        "TruBroker",            # after listing 1
+        "BayutGPT",             # after listing 3
+        "TruEstimate",          # after listing 7
+        "Dubai Transactions",   # after listing 10
+    )
+
+    def observed_widget_order(self, max_swipes: int = 12) -> list[tuple[str, int]]:
+        """Scroll the LPV and record inline widgets in the order they appear.
+
+        Returns ``[(widget_name, listing_cards_seen_before_it), ...]``.
+
+        The card count is **best-effort evidence, not an assertion target**. Counting
+        absolute position across scrolls means de-duplicating cards that reappear
+        between screenfuls, and two listings in the same tower can share a price, so
+        the count can drift. Relative order cannot drift that way, which is why the
+        test asserts order and merely reports the counts.
+
+        The checklist is explicit that "only inline filters containing data will be
+        visible", so a widget being absent is NOT a defect and this returns whatever
+        it finds.
+        """
+        import re
+
+        self.swipe_down_to_top()
+        found: list[tuple[str, int]] = []
+        seen_names: set[str] = set()
+        card_keys: list[str] = []
+
+        for _ in range(max_swipes):
+            elements = sorted(
+                (e for e in self.current_elements() if e.bounds),
+                key=lambda e: e.bounds[1],
+            )
+            for el in elements:
+                haystack = f"{el.text or ''} {el.content_desc or ''} {el.resource_id or ''}"
+                if el.resource_id == self.LISTING_CARD:
+                    key = f"{el.bounds[1]}:{(el.text or '')[:24]}"
+                    if key not in card_keys:
+                        card_keys.append(key)
+                    continue
+                for name, pattern in self.INLINE_WIDGET_MARKERS.items():
+                    if name in seen_names:
+                        continue
+                    if re.search(pattern, haystack, re.IGNORECASE):
+                        seen_names.add(name)
+                        found.append((name, len(card_keys)))
+            if len(seen_names) == len(self.INLINE_WIDGET_MARKERS):
+                break
+            self.swipe_up()
+        return found
+
     def is_displayed(self) -> bool:
         return self.is_present(resource_id=self.SELECT_LOCATION)
 

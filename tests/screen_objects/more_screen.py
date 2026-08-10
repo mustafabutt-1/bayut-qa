@@ -44,6 +44,52 @@ class MoreScreen(BaseScreen):
             "sign-in state; refusing to guess"
         )
 
+    # --- §21 More screen sections -----------------------------------------
+    # Labels come from the checklist itself, so text matching is legitimate here: the
+    # checklist specifies the wording. Still English-only — the Localization section
+    # (§23) covers the other three locales and is blocked on the locale-switch decision.
+    SECTIONS_UNSIGNED: tuple[str, ...] = (
+        "Activity Log", "Sell My Property", "Dubai Transactions", "TruEstimate",
+        "Find my Agent", "Favourites", "Floor Plans", "Language", "Manage Alerts",
+        "Notification Center", "Blog", "Guides", "Settings", "Contact Us",
+        "About Us", "Privacy Policy",
+    )
+    SECTIONS_SIGNED_IN: tuple[str, ...] = SECTIONS_UNSIGNED + ("Log Out",)
+
+    # Present in the checklist but time-limited or role-scoped, so absence is reported
+    # rather than failed: a 2024 awards promo may simply have ended, and agent-only
+    # rows depend on the account type.
+    SECTIONS_ADVISORY: tuple[str, ...] = (
+        "Bayut Awards 2024",        # dated promo — may have been retired
+        "View Profile",             # agent accounts only
+        "My Transactions Reports",  # agents only
+        "Edit Profile",             # signed-in only
+        "My TruEstimate Reports",   # signed-in only
+    )
+
+    def visible_section_labels(self, max_swipes: int = 12) -> list[str]:
+        """Scroll More top-to-bottom and collect every visible text label, in order."""
+        self.swipe_down_to_top()
+        labels: list[str] = []
+        for _ in range(max_swipes):
+            for el in sorted((e for e in self.current_elements() if e.bounds),
+                             key=lambda e: e.bounds[1]):
+                text = (el.text or el.content_desc or "").strip()
+                if text and text not in labels:
+                    labels.append(text)
+            before = len(labels)
+            self.swipe_up()
+            if len(labels) == before:
+                break  # nothing new came into view; we are at the bottom
+        return labels
+
+    def missing_sections(self, expected: tuple[str, ...],
+                         labels: list[str] | None = None) -> list[str]:
+        """Which expected sections are not present. Case- and spacing-insensitive."""
+        found = labels if labels is not None else self.visible_section_labels()
+        norm = {"".join(l.lower().split()) for l in found}
+        return [s for s in expected if "".join(s.lower().split()) not in norm]
+
     def open_activity_log(self):
         from .activity_log_screen import ActivityLogScreen
         self.safe_tap(resource_id=self.ACTIVITY_LOG_CARD)
