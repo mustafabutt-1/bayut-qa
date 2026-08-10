@@ -55,6 +55,25 @@ class PropertiesResultsScreen(BaseScreen):
         "Dubai Transactions",   # after listing 10
     )
 
+    def search_locations(self, *names: str, reset_first: bool = True):
+        """Apply an exact set of locations and land back on results.
+
+        Resets by default: the picker accumulates, so without a reset a test that asks
+        for one location can silently be running against three left over from the last
+        one — which matters enormously for the TruBroker widget rules, where "multiple
+        locations" is itself the condition under test.
+        """
+        picker = self.open_location_picker()
+        if reset_first:
+            picker.safe_tap(resource_id=picker.RESET)
+        for name in names:
+            picker.select_location(name)
+        return picker.confirm().show_results()
+
+    def has_inline_widget(self, name: str, max_swipes: int = 12) -> bool:
+        """Is a named inline widget anywhere on this result set?"""
+        return name in dict(self.observed_widget_order(max_swipes=max_swipes))
+
     def observed_widget_order(self, max_swipes: int = 12) -> list[tuple[str, int]]:
         """Scroll the LPV and record inline widgets in the order they appear.
 

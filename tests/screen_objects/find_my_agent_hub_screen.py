@@ -20,8 +20,41 @@ class FindMyAgentHubScreen(BaseScreen):
     SEARCH_INPUT = "com.bayut.bayutapp:id/et_search"
     AGENCY_RESULT_NAME = "com.bayut.bayutapp:id/tv_agency_name"
 
+    # Sibling of AGENCIES_TOGGLE. The naming pattern makes `rb_agents` very likely, but
+    # it has never been observed here — the crawl dumps are gitignored and the live
+    # session only ever needed the Agencies side. Callers use `switch_to_agents()`,
+    # which falls back to text so a wrong id degrades to a slower tap, not a failure.
+    # [UNVERIFIED — confirm the id from a live run and delete the fallback.]
+    AGENTS_TOGGLE = "com.bayut.bayutapp:id/rb_agents"
+    LEADERBOARD_MARKER_TEXT = "Leaderboard"
+
+    def is_displayed(self, timeout: int = 10) -> bool:
+        return self.is_present(resource_id=self.AGENCIES_TOGGLE, timeout=timeout)
+
     def switch_to_agencies(self):
         self.safe_tap(resource_id=self.AGENCIES_TOGGLE)
+
+    def switch_to_agents(self):
+        if self.is_present(resource_id=self.AGENTS_TOGGLE, timeout=3):
+            self.safe_tap(resource_id=self.AGENTS_TOGGLE)
+        else:
+            self.safe_tap(text="Agents")
+
+    def toggle_labels(self) -> list[str]:
+        """The Agents / Agencies segmented-control labels, left to right."""
+        toggles = [e for e in self.current_elements()
+                   if e.bounds and (e.text or e.content_desc)
+                   and (e.klass.endswith("RadioButton") or e.resource_id.endswith("_rb"))]
+        return [(e.text or e.content_desc).strip()
+                for e in sorted(toggles, key=lambda e: e.bounds[0])]
+
+    def visible_agency_names(self) -> list[str]:
+        return [e.text.strip() for e in self.current_elements()
+                if e.resource_id == self.AGENCY_RESULT_NAME and e.text]
+
+    def has_leaderboard(self, timeout: int = 3) -> bool:
+        """Checklist: end users must NOT see the leaderboard; agents must."""
+        return self.is_present(text=self.LEADERBOARD_MARKER_TEXT, timeout=timeout)
 
     def open_search(self):
         self.safe_tap(resource_id=self.SEARCH_ENTRY)
