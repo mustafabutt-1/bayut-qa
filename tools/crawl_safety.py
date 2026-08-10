@@ -160,7 +160,13 @@ DEFAULT_BLOCK_RULES: tuple[Rule, ...] = (
     Rule(
         "BLOCK-LEAD-EMAIL", "lead_contact",
         "Sends an email enquiry to an agency — a billable lead.",
-        any_field=r"\b(e-?mail|send\s*(e-?mail|message|enquiry|inquiry)|mailto)\b|البريد\s*الإلكتروني|راسل",
+        # (?<!with[ _]) excludes the standalone "email" match only when it's the
+        # OAuth-style "Continue with Email" / "Sign in with Email" auth-method
+        # pattern (confirmed live: fl_continue_with_email false-positived here,
+        # blocking a sign-in button that never contacts an agent). "send email",
+        # "mailto", and the Arabic forms are unaffected — those stay unconditional.
+        any_field=r"(?<!with[ _])\be-?mail\b|send\s*(e-?mail|message|enquiry|inquiry)|"
+                  r"\bmailto\b|البريد\s*الإلكتروني|راسل",
     ),
     Rule(
         "BLOCK-LEAD-CONTACT", "lead_contact",
@@ -486,6 +492,11 @@ _MUST_NOT_BLOCK: tuple[tuple[str, str], ...] = (
     ("text", "Back"),
     ("text", "Map"),
     ("resource_id", "com.bayut.app:id/listing_card"),
+    # Confirmed live: these false-positived on the bare "email" word before the
+    # (?<!with[ _]) exclusion was added to BLOCK-LEAD-EMAIL — a sign-in method
+    # selector, not a lead-contact action.
+    ("text", "Continue with Email"),
+    ("resource_id", "com.bayut.app:id/fl_continue_with_email"),
 )
 
 

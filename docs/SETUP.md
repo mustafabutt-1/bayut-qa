@@ -77,6 +77,17 @@ curl -s http://127.0.0.1:4723/status
 
 Base path is `/`, which matches the `APPIUM_SERVER_URL` default in `.env.example`.
 
+**Always start the server with `--allow-insecure=uiautomator2:adb_shell`.** One screen
+(`FindMyAgentHubScreen.search()`) types via Appium's `mobile: shell` extension instead of
+`send_keys()`, because `send_keys()` never triggers that field's live search-as-you-type
+listener (docs/DECISIONS.md D-019/D-026). Without this flag, `mobile: shell` calls fail
+outright. Appium 3.x requires the `<driverName>:<featureName>` form — the bare
+`adb_shell` flag crashes server startup instead of just refusing the feature:
+
+```bash
+appium --port 4723 --allow-insecure=uiautomator2:adb_shell &
+```
+
 ---
 
 ## 3. Python environment
@@ -240,10 +251,10 @@ python tools/adb.py proxy clear
 ## 8. First crawl
 
 ```bash
-appium --port 4723 &
+appium --port 4723 --allow-insecure=uiautomator2:adb_shell &
 mitmdump -w runs/crawl-01/capture.flow &
 
-python tools/crawl_safety.py selftest        # 65/65 or stop
+python tools/crawl_safety.py selftest        # 67/67 or stop
 
 python tools/crawler.py crawl \
     --package $BAYUT_APP_PACKAGE \

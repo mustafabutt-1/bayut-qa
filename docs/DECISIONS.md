@@ -132,6 +132,438 @@ session; learning it in minute five changes what we do that day.
 traffic is also consistent with non-HTTP transport or a misconfigured proxy. Confirmation
 is a two-step human check, printed with the warning.
 
+## Phase 0.5 — first live crawl
+
+### D-034 · 2026-08-10 · `tap_tab()` classified a coincidentally-similar element, not the one it tapped
+**Decision.** `AgentProfileScreen.tap_tab()` now classifies for safety using the exact
+xpath-located element (matched by comparing `WebElement.rect` against a fresh
+`current_elements()` bounds list), instead of a separate, unscoped
+`_match(text=tab_text)` call. A new `ALLOW-BAYUT-AGENT-PROFILE-TABS` rule
+(exact-anchored `^(About|Properties|Transactions)$`) allowlists these tab labels,
+since they carry no resource-id of their own on this screen.
+**Rationale.** Confirmed live: `_match(text="Properties")` doesn't scope to the tab
+container at all — it searches every element on screen for that text, and Agency
+Detail's own `tv_properties_tab` toggle (a completely different control, already
+independently allowlisted by resource-id) also has the text "Properties" and was
+apparently who actually got classified. It happened to be ALLOW, so the tap proceeded
+without anyone noticing the classification target wasn't the element actually being
+clicked. `tap_tab("Transactions")` had no such coincidental stand-in and correctly
+came back UNCERTAIN — not a new problem, but the same ambiguity `tap_tab()`'s own
+docstring already named ("Plain tap-by-text is ambiguous three ways on this screen")
+finally producing a visible failure instead of a silent near-miss.
+**Consequence.** Classification and the actual click now always agree on which
+element they mean. Worth noting as a general pattern: an unscoped `_match(text=...)`
+call used only for classification (not for locating the click target) can silently
+approve the wrong element as easily as it can wrongly refuse the right one — this
+session found both directions (D-025's "Continue with Email" was wrongly refused; this
+is a case where a wrong element was wrongly approved).
+
+### D-033 · 2026-08-10 · `open_agent()` opened the wrong agent — the D-024 scrollIntoView gap, unfixed spot finally hit
+**Decision.** `AgencyDetailScreen.open_agent()` no longer uses
+`safe_tap_scrolled_text()`/`scroll_into_view_by_text()` (native UiAutomator2
+`scrollIntoView`). It manually swipes and re-checks with `is_present()` after each
+swipe, then classifies and taps the confirmed element directly — the same pattern
+`test_sign_in.py`'s `_swipe_to_find_text()` already established for D-024.
+**Rationale.** Directly observed live: with several agent rows visible at once on an
+agency's Agents tab (SL Bergen, Alexandru Garbanzo, SectorLabs Testing Agent E2E,
+Adrian Buda, SL Claim...), calling `open_agent("Alexandru Garbanzo")` opened
+**SectorLabs Testing Agent E2E**'s profile instead. D-024 already diagnosed and fixed
+this exact failure mode for a different screen — `scrollIntoView` can complete without
+raising even when it didn't actually land on the requested element — but that fix was
+explicitly scoped narrowly at the time: "`scroll_into_view_by_text`/
+`safe_tap_scrolled_text` ... are unchanged; this fix is scoped to the one place a
+false positive would be genuinely consequential." Opening the wrong agent isn't
+consequential in the lead-generation sense D-024 was guarding against, but it's a
+real correctness bug — `test_agency_agent_details` and `test_agent_last_transaction`
+were asserting against the wrong agent's data outright, not experiencing flaky
+timing.
+**Consequence.** `AgencyDetailScreen.open_agent()` and `test_sign_in.py`'s local
+`_swipe_to_find_text()` are now two independent implementations of the identical
+pattern — not consolidated into one shared helper in this pass, since `base.py`'s
+existing `safe_tap_scrolled_text()` is still relied on elsewhere
+(`more_screen.py.open_find_my_agent()`) and those callers haven't shown the same
+failure yet. Any future caller that also hits a wrong-element selection from
+`scrollIntoView` should get this same manual-swipe treatment rather than trying to
+patch the shared native-scrollIntoView helper itself.
+
+### D-032 · 2026-08-10 · Agent Profile's Transactions tab loads asynchronously — a longer wait, not a conditional skip
+**Decision.** `AgentProfileScreen.tap_tab()` now accepts an optional `timeout`
+parameter (defaults to the screen's own 15s). Both callers that tap "Transactions"
+(`test_agency_agent_details.py`, `test_agent_last_transaction.py`) now pass
+`timeout=30`.
+**Rationale.** First hypothesis (since discarded) was that the tab is conditionally
+absent for agents without qualifying deal history, matching the live-data-drift
+pattern `test_agent_last_transaction.py` already documents for deal *status*. A user
+directly observing the same agent's profile live contradicted that — the tab was
+genuinely visible. Re-investigated by polling the identical, unchanged screen every
+3 seconds: `Transactions` was absent on the first checks and present moments later,
+with nothing else on screen changing. That is a load-timing race, not a missing
+feature — About and Properties render immediately on profile load, but Transactions
+depends on a separate, slower backend call (the agent's deal/transaction history) that
+sometimes resolves after the previous 15s wait had already given up. Confirmed the
+same agent (`Alexandru Garbanzo`, verified by name on screen) was open in every check,
+so this wasn't a wrong-profile mismatch either.
+**Consequence.** No behavior needed "tolerating" — the tab reliably exists, it just
+sometimes needs longer than 15s to appear. Any other caller of `tap_tab("Transactions")`
+should use the same longer timeout; About/Properties have no evidence of this delay and
+keep the default.
+
+### D-031 · 2026-08-10 · The favourite heart doesn't respond to `.click()` at all — needs a real coordinate tap
+**Decision.** `PropertiesResultsScreen.favourite_nth_listing()` now taps the
+favourite checkbox via `BaseScreen.tap_at()` (a real W3C pointer-action touch at the
+element's `center`), not `WebElement.click()`. A new `tap_at(x, y)` helper was added
+to `BaseScreen` for this. Idempotency (don't un-favourite something the caller only
+meant to ensure is favourited) is now detected behaviourally — if the "Remove property
+from Favourites?" confirmation appears after the tap, it means the listing was already
+favourited; the method declines it (`btn_no`, new `ALLOW-BAYUT-CONFIRM-DIALOG-DECLINE`
+rule) and returns, rather than trying to read a `checked`/`selected` attribute.
+**Rationale.** Confirmed live, conclusively, across two devices and two app builds:
+`favourite_cb` reports `clickable="true"` but `checkable="false"`, and its `checked`
+attribute is **always** `false` — before a tap, after a tap, favourited or not. A prior
+attempt this session (now superseded) tried waiting for `checked` to become `true`
+after `.click()`, which could never succeed regardless of timeout, because the
+attribute never changes at all — not a timing bug, a wrong signal entirely. Direct
+evidence that `.click()` itself does nothing: tapping a *known-unfavourited* listing
+via `.click()` added nothing to the Favourites screen (confirmed by inspecting it
+immediately after), while a real coordinate touch (W3C pointer down/pause/up) at the
+identical element's bounds on an *already-favourited* listing correctly triggered the
+app's own removal-confirmation dialog — proof the real touch reaches whatever
+`OnTouchListener`/`OnClickListener` this custom `ImageView` actually has, and the
+synthetic accessibility click Selenium's `.click()` issues does not.
+**Consequence.** `tap_at()` is now available on `BaseScreen` for any other control that
+turns out to have the same accessibility-click-vs-real-touch gap; the safety
+classification step is unchanged (still evaluated via `may_tap()` on the target
+`Element` before touching it) — only the physical gesture mechanism differs from
+`safe_tap()`'s own `.click()`.
+
+### D-030 · 2026-08-10 · Device serial is auto-detected; a build mismatch prints a loud warning instead of silently producing mystery failures
+**Decision.** `tests/conftest.py`'s `driver` fixture resolves the device via
+`tools/adb.py`'s `Adb.require_device()` (already existed, previously only used by the
+CLI) instead of reading `DEVICE_D1_SERIAL` directly into `opts.udid`.
+`DEVICE_D1_SERIAL` is now an optional override, used only to disambiguate when several
+devices are attached at once — the common single-device case needs no `.env` edit at
+all. Separately, if `BAYUT_BUILD_VERSION` is set in `.env`, the fixture compares it
+against the connected device's actually-installed `versionName` (via `Adb.app_version()`)
+and prints a loud, explicit mismatch warning before any test runs, rather than saying
+nothing and letting a wall of scattered "element not found" failures be the only signal.
+**Rationale.** This session manually edited `DEVICE_D1_SERIAL` in `.env` back and forth
+three separate times switching between two physical devices — exactly the friction the
+project's own transferability goal (CLAUDE.md: "the project needs to be transferable...
+works on any android device") was supposed to eliminate. Separately, and more
+expensively: connecting a device running a different app build (an unreleased Search
+2.0 redesign) produced ~14 failures that were initially indistinguishable from real
+device-portability bugs, and took a live page-source investigation to correctly
+attribute to build drift rather than a code defect. Both frictions have the same fix
+shape — surface the actual environment state up front, rather than making a human
+re-derive it from failure symptoms after the fact.
+**Consequence.** Reconnecting a different device with the *same* app build now needs
+zero config changes. Reconnecting a device with a *different* build still runs (this
+is not a hard block — deliberately testing an unreleased build, as happened this
+session, is a legitimate thing to do) but now announces the mismatch immediately
+instead of costing a multi-minute live diagnosis to explain a wall of failures.
+
+### D-029 · 2026-08-10 · `--import-mode=importlib`, forced by two same-named `consequential/` packages under numbered folders
+**Decision.** Added `pytest.ini` with `addopts = --import-mode=importlib`.
+**Rationale.** Confirmed live, on the very first attempt to collect the entire suite
+in one `pytest` invocation (every prior run this session targeted one file or one
+folder): pytest's default "prepend" import mode failed with
+`ModuleNotFoundError: No module named 'consequential.test_email_lead_marks_contacted'`.
+Root cause: `tests/suites/` is organized exactly as CLAUDE.md's own architecture calls
+for — one numbered folder per regression-checklist section (`04_sign_in_up`,
+`05_leads`, ...) — and two of those numbered folders each contain their own
+`consequential/` subpackage. pytest's package-walk for "prepend" mode treats a
+leading-digit directory name as *not a valid dotted-import component* and stops there,
+inserting the numbered folder itself onto `sys.path` rather than continuing up to
+`tests/`. Both `consequential/` packages then resolve to the same short module name
+(`consequential.<file>`), and whichever gets imported first wins — the second file's
+import fails outright, since Python's module cache has no way to tell the two
+same-named packages apart. `--import-mode=importlib` sidesteps the whole mechanism:
+each test file's module identity is derived from its own filesystem path, not a
+package-walk dotted name, so there is nothing for two identically-named directories to
+collide over.
+**Consequence.** No directory renames needed — the numbered, checklist-section folder
+structure stays exactly as designed. Any future section that also needs its own
+`consequential/` subfolder (a third, a fourth) is safe by construction now, not by
+avoiding the name collision.
+
+### D-028 · 2026-08-10 · The App Review popup gets its own bypass, scoped by a marker unique to it, not a shared ALLOW rule
+**Decision.** `BaseScreen.dismiss_review_popup_if_present()` checks for
+`app_review_content` ("How was your experience on Bayut?", checklist §9's App Review
+bottom sheet) and, only if present, taps the scrim (`touch_outside`) directly —
+bypassing `safe_tap()` entirely rather than adding an ALLOW rule for it. Wired into the
+`home_screen` fixture in `tests/conftest.py`, right after Home is confirmed displayed.
+**Rationale.** Confirmed live mid-session: this suite's own repeated favouriting across
+many test runs crossed whatever session/activity threshold triggers the popup, and it
+sat on top of Home intercepting the next test's first tap. The obvious fix — allowlist
+`touch_outside` — is wrong: that resource-id is the generic
+`BottomSheetDialogFragment` scrim reused by *every* bottom sheet in the app (filters,
+price range, info popups — `buy_rent_sheet.py`'s own `SCRIM` comment already flags this
+as "UNCERTAIN — unlabeled, do not tap; use `.back()` to dismiss"). An ALLOW rule for it
+would silently permit tapping the scrim behind any sheet, not just this one, and the
+safety engine classifies one element at a time — it has no way to express "only allow
+this when `app_review_content` is also present." Checking that unique marker ourselves,
+before ever touching the ambiguous scrim, gets the same safety property the engine
+can't express here.
+**Consequence.** This is a third, narrow tap path outside `safe_tap()`/`deliberate_tap()`
+— justified the same way `back()` already is (not a tap on a *classified* element), not
+a general-purpose escape hatch. It stays scoped to this one popup's own unique marker;
+anything that wants to bypass `safe_tap()` for a different reason needs its own
+equally-specific justification, not reuse of this method.
+
+### D-027 · 2026-08-10 · Sign-in state has a fast, scroll-free signal; "Continue with Email" has a cached-login branch
+**Decision.** Two related fixes to the sign-in consequential test
+(`tests/suites/04_sign_in_up/consequential/test_sign_in.py`), both driven by live
+evidence gathered directly from the device (page-source dumps via a raw Appium
+session, not guessed):
+1. `MoreScreen.is_signed_in()` is now the authoritative signed-in/out check. The
+   account row at the very top of More swaps entirely between the two states —
+   signed out shows `SIGN_IN_BUTTON` (`more_user_btn`, "Sign In"); signed in shows
+   `LOGGED_IN_USER_CONTAINER` instead ("Hi, `<name>`" + "View Profile") — and the two
+   never coexist. This reads instantly, no scroll needed, unlike the existing
+   "Log Out" text check (D-024), which still requires scrolling and is now used only
+   to physically locate the Log Out row once `is_signed_in()` has already confirmed
+   there's a reason to tap it.
+2. `SignInMethodScreen.continue_with_email()` now transparently handles a Keycloak
+   interstitial ("Welcome to Bayut.com" / "You have previously logged in. Continue
+   from where you left off?", `KeyCloakAuthActivity`) that appears in place of the
+   blank email/password form whenever the device already has a cached recent login —
+   which it now does, since this same test has already run once this session. It taps
+   "Log in with another account" (`fl_login_button`, new `ALLOW-BAYUT-LOGIN-ANOTHER-ACCOUNT`
+   rule) to reach the real form (`EmailLoginScreen`) either way, rather than silently
+   accepting the device-cached account.
+**Rationale.** (1) is a direct answer to needing explicit "if no logout button, already
+logged out" / "if no sign-in button, already signed in" guards on both the logout and
+sign-in paths — reading the real top-level control is more precise and far faster than
+inferring state from a scroll search. (2) is a genuine one-time-vs-repeat-run
+divergence: the very first live run of this test (this session) never saw the
+interstitial, because there was no cached login yet to trigger it; the second run hit
+`EmailLoginScreen.is_displayed()` failing outright, because the suite was still on the
+Keycloak interstitial rather than the blank form. Per CLAUDE.md's own rule — evidence
+contradicting the test's assertion is a test defect, not a bug — this was the
+automation not accounting for a real, legitimate app state, not an app regression.
+**Consequence.** The sign-in test is idempotent across repeated runs now, cached login
+or not. `SignInScreen`/`SignInMethodScreen` callers never need to branch on which
+Keycloak screen appeared — `continue_with_email()` always returns a ready
+`EmailLoginScreen`.
+
+### D-026 · 2026-08-10 · `mobile: shell` replaces a standalone `adb` subprocess for text entry
+**Decision.** `FindMyAgentHubScreen.search()` types via Appium's `mobile: shell`
+extension (`driver.execute_script("mobile: shell", {...})`, running `input text`
+through the existing Appium session) instead of a separate `subprocess.run(["adb", ...])`
+call.
+**Rationale.** D-019 established that Appium's own `send_keys()` never triggers this
+screen's live search-as-you-type listener, even though the field's visible text ends up
+correct either way — a workaround was already necessary. The original workaround shelled
+out to `adb` directly, a second automation path entirely outside Appium, which
+CLAUDE.md's project brief calls for avoiding ("we will only strictly use Appium and
+Appium Inspector for automating and crawling" — this session's explicit scope
+constraint). `mobile: shell` achieves the identical device-level `input text` behaviour
+from inside the one Appium session already in use everywhere else in the suite. Requires
+the Appium server to be started with `--allow-insecure=uiautomator2:adb_shell`
+(Appium 3.x's `<driverName>:<featureName>` syntax — the bare `adb_shell` flag crashes
+server startup); documented in `docs/SETUP.md`.
+**Consequence.** The suite has no code path left that automates the device outside an
+Appium session. `import os` / `import subprocess` removed from
+`find_my_agent_hub_screen.py` as dead imports once the subprocess call was gone.
+
+### D-025 · 2026-08-10 · BLOCK-LEAD-EMAIL false-positived on "Continue with Email"
+**Decision.** `BLOCK-LEAD-EMAIL`'s bare-word `email` match now excludes the OAuth-style
+"Continue with Email" / "Sign in with Email" auth-button pattern specifically, via a
+fixed-width negative lookbehind `(?<!with[ _])` immediately before `\be-?mail\b`. "send
+email", "mailto", and the Arabic forms are unaffected — unconditional as before.
+**Rationale.** Confirmed live: `fl_continue_with_email` (a sign-in method selector, adds
+no agent contact) was refused by `safe_tap` as BLOCK-LEAD-EMAIL, purely because the
+resource-id contains the standalone word "email". This is the shared default rule, not
+something an allowlist YAML entry can fix — block always wins over allow, and the config
+can only add rules, never narrow a default (D-011). A false positive in a default block
+rule has to be fixed at the source.
+**This was not a "just add an exception" edit.** `DEFAULT_BLOCK_RULES` is
+safety-critical and shared by every crawl `tools/crawler.py`/`tools/prober.py` will ever
+run. Two new `_MUST_NOT_BLOCK` selftest assertions (`Continue with Email` text and its
+resource-id) were added alongside the fix, proving the narrowing is precise: 67/67
+still passes, including every existing real lead-email case (plain "Email", "Send
+Email"). `tools/crawler.py offline` re-verified unaffected (still 10 blocked / 3
+uncertain on the fixture set).
+**Consequence.** `fl_continue_with_email` now falls through to UNCERTAIN (no ALLOW rule
+covers it either) rather than BLOCK — still requires an explicit allowlist ALLOW entry
+before any `safe_tap` can use it, same review discipline as every other UNCERTAIN
+element promoted this session.
+
+### D-024 · 2026-08-10 · Don't trust UiAutomator2's scrollIntoView for a "does this exist" check
+**Decision.** The sign-in consequential test's sign-in-state detection
+(`tests/suites/04_sign_in_up/consequential/test_sign_in.py`) no longer uses
+`scroll_into_view_by_text` (UiAutomator2's own `scrollIntoView`) to determine whether
+"Log Out" is present. It swipes up manually, bounded, re-checking with `is_present()`
+(a plain, unscrolled visibility check) after each swipe.
+**Rationale.** Confirmed live: `scrollIntoView` completed without raising even when
+"Log Out" was not actually present (the account was already signed out) — evidence
+screenshot showed no such row in view, and the follow-up confirmation dialog never
+appeared, meaning the tap landed on whatever UiAutomator2 settled on instead of failing
+cleanly. That's the wrong failure mode directly underneath a consequential tap: a
+"not found" signal has to be trustworthy, not a maybe.
+**Consequence.** `scroll_into_view_by_text`/`safe_tap_scrolled_text` (used for safe,
+gated taps elsewhere — e.g. opening an agent from a list) are unchanged; this fix is
+scoped to the one place a False positive would be genuinely consequential.
+
+### D-023 · 2026-08-10 · Re-locate immediately before clicking, don't reuse the wait_for() reference
+**Decision.** `safe_tap()` re-fetches the element via a second `wait_for()` call right
+before `.click()`, instead of reusing the `WebElement` obtained before classification.
+**Rationale.** Confirmed live (`StaleElementReferenceException`): the `page_source` dump
+`_match()` performs for classification can invalidate Appium's cached element handle
+even when nothing visibly changed on screen, widening the gap between "found it" and
+"click it" enough to go stale in practice.
+**Consequence.** Every `safe_tap()` now costs two element lookups instead of one — an
+acceptable, bounded cost for eliminating an intermittent failure class.
+
+### D-022 · 2026-08-10 · Classification falls back to every element, not just tap candidates
+**Decision.** `BaseScreen._match()` now falls back to searching every element (not just
+`tappable()` candidates) when a resource-id/accessibility-id/text lookup finds nothing
+among tap candidates.
+**Rationale.** Confirmed live, twice: a label naming what a test wants (a menu row's
+"Favourites" text, a result card's `tv_agency_name`) is very commonly a non-clickable
+child of the actual clickable container (`clickable="false"` on the TextView itself).
+`tappable()` correctly excludes it either way — that's right for deciding what an
+autonomous crawl should try tapping — but wrong for classification here, since Selenium's
+`wait_for()` already found and can click the element (the OS routes the touch to the
+real clickable ancestor regardless of which node's coordinates were used).
+**Consequence.** `safe_tap`/`assert_blocked` can now classify labels that aren't
+themselves clickable, without weakening what `tools/crawler.py`'s own autonomous
+`tappable()` calls consider valid candidates — this only changes `screen_objects/base.py`.
+
+### D-021 · 2026-08-10 · A swipe ending too close to the top can open the OS notification shade
+**Decision.** `ListingDetailScreen.expand_content_sheet()`'s upward swipe now ends at
+25% of screen height, not 15%.
+**Rationale.** Confirmed live: ending the drag at 15% height, this session's device
+occasionally read the gesture as a pull-down-from-top system gesture and opened
+Android's notification shade instead of just expanding the in-app content sheet.
+Nothing was tapped there (safely recovered with two back presses), but it's a real,
+avoidable device-interaction risk worth designing away rather than tolerating.
+**Consequence.** General lesson for any future swipe/drag coordinate near the top of
+the screen in this suite: leave real margin from the status-bar/gesture-nav zone, not
+just enough to visually clear the target element.
+
+### D-020 · 2026-08-10 · A resource-id + text locator must combine both, not silently drop text
+**Decision.** `tests/screen_objects/base.py::BaseScreen._by()` builds a UiAutomator
+selector combining `resourceId` and `text` when both are given, instead of building a
+plain `AppiumBy.ID` locator (which cannot filter by text at all).
+**Rationale.** Several Bayut screens reuse one resource-id across a row of chips (e.g.
+`tv_quick_filter` for the filter icon and every "Rent"/"Residential"/"Yearly"/"Beds"/
+"Price" chip). The original code accepted a `text` parameter for element
+*classification* but the actual Selenium locator ignored it, always returning the
+first element with that resource-id — regardless of which chip was asked for.
+Confirmed live: `open_buy_rent_picker()` (asking for the "Rent" chip) and
+`open_property_type_picker()` (asking for "Residential") both silently tapped the
+filter *icon* instead (the first, empty-text match), landing on the Full Filters sheet
+every time and failing two tests plus cascading errors through everything after.
+**Consequence.** Every screen object using `safe_tap(resource_id=..., text=...)` for a
+shared-id chip row now taps the actually-requested option.
+
+### D-019 · 2026-08-10 · Porting the pre-existing `appium/` suite: gate stays, exception doesn't
+**Decision.** A pre-existing, separately-authored Appium suite (`appium/`, gitignored per
+this entry — has real test-account email/phone inline in source) was audited this
+session. Its structure and hard-won device-quirk fixes (force-stop insufficient for a
+clean reset; W3C pointer actions required over `mobile: swipeGesture`; `adb shell input
+text` required over Appium `send_keys`/`mobile: type` for search-as-you-type) are sound
+and independently corroborate D-015/D-016/D-018. Its safety model is not: `tap_id`/
+`tap_text` click whatever is found with no classification at all, and one test
+(`test_email_lead_marks_contacted.py`) submits a real email lead end-to-end.
+**That test's target is not arbitrary** — `AGENCY = "Explorer Real Estate"`,
+`LEAD_EMAIL = "qa-automation@sectorlabs.ro"` match the QA team's own sanctioned test
+agency and account from `docs/REGRESSION-CHECKLIST.md` §5. It is a real, valuable
+capability this session's tooling didn't have: a verified-safe way to test the lead
+pipeline end-to-end on production, without a separate staging environment.
+**Decision on the port.** The default-deny tap gate (`crawl_safety.SafetyPolicy`,
+`tests/screen_objects/base.py::safe_tap`) is **not** modified to carve out an exception
+for this agency — an agency-scoped ALLOW rule would also apply during unattended
+PASSIVE/PROBE crawling, where nothing is watching a specific run to confirm the
+navigation actually landed where a human once verified it would. The safety guarantee
+this whole system exists to provide is "a machine never makes this specific judgment
+call unsupervised" — an allowlist exception is exactly the model making that call.
+Instead: every safe, evidenceable behaviour from the old suite (sign-in, favourite,
+DPV-marks-viewed, agency/agent browsing, filters, smoke) is rebuilt through the normal
+`safe_tap()` gate in `tests/suites/`. The one genuinely consequential test is rebuilt
+separately, outside the shared gate, as an explicitly opt-in, human-run-only module
+(`tests/suites/05_leads/consequential/`) that verifies the agency by ID before the DPV
+loads (not by name after), captures a screenshot immediately before the one ungated tap,
+and is never imported or reachable from anything that runs unattended.
+**Consequence.** Two tap paths now exist in the test suite — the gated one (default,
+everything) and the explicit, isolated, evidence-carrying one (one file, one purpose,
+requires deliberately invoking it by name). `tools/crawler.py`/`tools/prober.py` remain
+entirely unaware the second path exists.
+
+### D-018 · 2026-08-10 · `--bootstrap-content-desc` replays after every reset, not just once
+**Decision.** `_reset_to_home()` now replays a configurable bootstrap step (currently one
+accessibility-id tap) immediately after every relaunch, before any queued path is
+replayed on top of it.
+**Rationale.** The D-016 empty-path fix only helped the crawl's root screen. Every
+*non-empty* queued path (e.g. re-entering the Filters sheet, or a listing's detail page)
+still called `_reset_to_home()`, which lands on the app's own default tab (Home) — not
+necessarily the section the crawl was bootstrapped into via `--preserve-app-state`
+(Properties, in this session). Replaying a path recorded relative to Properties, starting
+from Home instead, silently fails to find its first element. Observed directly: repeated
+crawl invocations kept re-discovering the same ~10 shallow screens under Properties and
+never got further, because every queued deeper path's replay was quietly failing.
+**Consequence.** `crawler.py crawl --bootstrap-content-desc Properties ...` now returns to
+Properties after every reset, so queued paths that start from there can actually replay.
+Generalizing beyond a single accessibility-id tap (e.g. a multi-step bootstrap, or
+resource-id-based) is future work if a section needs more than one tap to reach.
+
+### D-017 · 2026-08-10 · A tap that leaves the app under test is a dead end, not a screen
+**Decision.** After every tap, if the resulting page source contains no element from
+`app_package`, the crawler treats it as an immediate dead end (log, reset, abandon the
+rest of this screen) instead of recording it as a new node in the screen graph.
+**Rationale.** Observed against the real device: a tap aimed at a Bayut filter chip
+instead landed in Snapchat (most likely a heads-up notification banner from an unrelated
+personal app intercepting the tap coordinates at that exact moment) — the crawler
+recorded Snapchat's Chat screen as a Bayut screen, auto-named "map" from its element
+shape, corrupting the graph with a screen that was never part of this app.
+**Consequence.** No safety regression either way: `BLOCK-FOREIGN-PACKAGE` already refuses
+every element on a foreign screen regardless of this fix, so nothing could have been
+tapped inside Snapchat. This fix is about map correctness, not the tap gate. **Device
+hygiene recommendation, not yet actioned:** a dedicated crawl/test device without
+personal social/messaging apps (or with their notifications disabled) would remove this
+failure mode entirely — see the open device-matrix question in `docs/PROJECT-STATE.md`.
+
+### D-016 · 2026-08-10 · One retry on a no-op back before declaring a dead end
+**Decision.** If `back()` leaves the fingerprint unchanged (not just "doesn't match
+origin," but literally identical to the screen before back was pressed), the crawler
+tries `back()` once more before logging a dead end and resetting.
+**Consequence.** Slightly more actions spent per genuine dead end (one extra `back()`),
+bounded to a single retry — not a loop.
+**Rationale.** Observed against the real app: Bayut's location-search screen
+auto-focuses its text field on open, so the first back press only dismisses the IME
+keyboard — screen content (chips, Reset/Done) is otherwise identical. The crawler was
+treating that as "back failed to return to origin" and aborting the rest of the current
+screen's elements after trying only one. This is a generically common Android pattern
+(any screen with an auto-focused input), not specific to this one screen.
+**Also decided the same session — `_navigate()` no longer resets for the empty root
+path.** The root queue item is the crawl's own starting screen, already captured before
+the queue was seeded; resetting it too discarded a `--preserve-app-state` bootstrap
+(e.g. manual navigation into a specific section) on the very first loop iteration, for
+no replay benefit.
+
+### D-015 · 2026-08-10 · Mid-crawl resets restart the process, never wipe app data
+**Decision.** `crawler.py`'s `_reset_to_home()` — used on every dead-end recovery and
+every queued-path replay — force-stops and relaunches the app instead of calling
+`pm clear`. `pm clear` is now used only implicitly, once, at true crawl start (via
+Appium's session-level reset).
+**Rationale.** Observed against the real app (build 15.7.2/1272): Bayut's onboarding
+(tracking-permission prompt, buy/rent question) is one-time-only, gated on app data. The
+original design called `pm clear` on every reset, which wiped the onboarding-complete
+flag every time — so the very first dead end (an unavoidable one: "back" from the first
+onboarding screen exits the app, since there is no back-stack that early) would re-arm
+onboarding, and every subsequent queued-path replay would immediately fail to find its
+recorded elements, since those were recorded against post-onboarding screens. The crawler
+could not have reached anything beyond onboarding under the original design, on this app,
+ever.
+**Consequence.** Onboarding must still be completed once, deliberately, before the
+breadth-first queue exploration starts (see the crawl session log in
+`docs/PROJECT-STATE.md`) — the crawler does not yet auto-detect and dismiss onboarding
+itself. A future improvement is an explicit bootstrap step that does that generically;
+until then, first-run onboarding is handled by a short guided walkthrough at the start of
+each fresh crawl, and the fix here just stops the crawler from re-triggering it
+afterward.
+
 ### D-014 · 2026-08-09 · PREVENTED, ALLOWED_EMPTY and CONSTRAINT_WRONG stay distinct
 **Decision.** `prober.py` P4 returns three separate verdicts for an attempted invalid
 combination, and never collapses them.

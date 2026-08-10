@@ -1,0 +1,209 @@
+# Crawl safety rule extensions — ACTIVE (this file is read by crawl_safety.SafetyPolicy
+# whenever --config context/crawl-allowlist.yaml / --safety-config is passed).
+#
+# This file may only ADD rules. There is no mechanism to remove a default block rule.
+#
+# Provenance: added 2026-08-10, first live crawl against com.bayut.bayutapp v15.7.2
+# (1272), device 51091FDAS002FR. See context/crawl-uncertain.md and
+# docs/PROJECT-STATE.md session log for what prompted each rule.
+
+version: 1
+
+allow:
+  - id: ALLOW-BAYUT-SECTION-TABS
+    category: navigation
+    reason: >
+      Bayut's own top-level section tab bar (Properties / New Projects / Transactions /
+      Agents), observed on the Home screen. Pure navigation between major app sections,
+      same class as the shipped ALLOW-NAV-TABS rule — it just doesn't recognise Bayut's
+      specific tab names. "New Projects" already matches ALLOW-PURPOSE by coincidence of
+      wording; this rule covers the other three so the crawler stops treating the whole
+      tab bar as UNCERTAIN. Switching to Transactions or Agents only changes which list
+      is shown — any consequential control reachable further inside those sections
+      (e.g. Call/Email/WhatsApp on an agent card, Claim Transactions) is still caught by
+      its own BLOCK rule regardless of navigation path; this rule does not touch those.
+      Confirmed empirically: crawl-uncertain.md flagged "Properties" (properties_tab)
+      as UNCERTAIN in the first live crawl; "Transactions"/"Agents" share the same
+      resource-id shape and were not yet individually observed as tappable, but are
+      structurally identical top-tab elements.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/(properties|transactions|agents)_tab"
+
+  - id: ALLOW-BAYUT-FURNISHING-ALL
+    category: filters
+    reason: >
+      "All" furnishing-status radio (rb_all_furnishing_status), flagged UNCERTAIN in the
+      first live crawl. Same class as the already-allowed Furnished/Unfurnished radios
+      (ALLOW-FILTER-VALUES) — it is the "no filter" default option in the same group, not
+      a distinct action. The generic word list doesn't include the bare word "all" since
+      that would be far too broad elsewhere; scoping to this exact resource-id keeps it
+      precise.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/rb_all_furnishing_status"
+
+  - id: ALLOW-BAYUT-ACTIVITY-LOG
+    category: navigation
+    reason: >
+      Activity Log entry point (cv_activity_log) on the More screen — opens a read-only
+      history view (Recent Searches / Viewed / Contacted tabs). Flagged UNCERTAIN while
+      porting appium/'s test_dpv_marks_viewed.py and test_email_lead_marks_contacted.py
+      (docs/DECISIONS.md D-019). No consequential action lives behind this entry point
+      itself; anything reachable further inside Activity Log is still individually
+      classified on its own merits.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/cv_activity_log"
+
+  - id: ALLOW-BAYUT-ACTIVITY-LOG-TABS
+    category: navigation
+    reason: >
+      Recent Searches / Viewed / Contacted tabs within the Activity Log
+      (viewed_rb / contacted_rb) — switches which read-only history list is shown,
+      same class as ALLOW-BAYUT-ACTIVITY-LOG above. Flagged UNCERTAIN while porting
+      appium/'s test_dpv_marks_viewed.py (docs/DECISIONS.md D-019).
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/(viewed|contacted|searches)_rb"
+
+  - id: ALLOW-BAYUT-FIND-MY-AGENT-TOGGLE
+    category: navigation
+    reason: >
+      Agents / Agencies toggle (rb_agents / rb_agencies) on the Find My Agent hub —
+      same class as the shipped ALLOW-PURPOSE Buy/Rent toggle: switches which list is
+      shown, no consequential effect. Flagged UNCERTAIN while porting appium/'s
+      test_agency_agent_details.py (docs/DECISIONS.md D-019).
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/rb_(agents|agencies)"
+
+  - id: ALLOW-BAYUT-AGENCY-RESULT
+    category: results
+    reason: >
+      Agency search result row (tv_agency_name) on the Find My Agent hub — opens the
+      read-only agency profile page. Same class as the shipped ALLOW-RESULTS rule
+      (listing/result cards); Bayut's agency-specific naming just isn't covered by its
+      generic word list. Flagged UNCERTAIN while porting appium/'s
+      test_agency_agent_details.py (docs/DECISIONS.md D-019). Any consequential control
+      reachable further inside (Call/Email/WhatsApp on the agency page) is still caught
+      by its own BLOCK rule regardless of this navigation step.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/tv_agency_name"
+
+  - id: ALLOW-BAYUT-AGENT-PROFILE-AGENCY-LINK
+    category: navigation
+    reason: >
+      The agency link/branding row (cl_agency_detail) on an Agent Profile screen —
+      AgentProfileScreen.open_agency_link() — navigates to that agency's own read-only
+      profile page, same class and same destination as ALLOW-BAYUT-AGENCY-RESULT just
+      above (a different entry point to the identical screen). Never previously
+      reached: this step of test_agency_agent_details.py was blocked by earlier bugs
+      (D-033/D-034) until now, so this element was never actually flagged UNCERTAIN
+      before. Any consequential control reachable further inside is still caught by
+      its own BLOCK rule regardless of this navigation step.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/cl_agency_detail"
+
+  - id: ALLOW-BAYUT-AGENCY-DETAIL-TABS
+    category: navigation
+    reason: >
+      Agents / Properties tabs on the Agency Detail screen (tv_agents_tab /
+      tv_properties_tab) — switches which read-only list is shown, same class as
+      ALLOW-BAYUT-SECTION-TABS. Flagged UNCERTAIN while porting appium/'s
+      test_agency_agent_details.py (docs/DECISIONS.md D-019).
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/tv_(agents|properties)_tab"
+
+  - id: ALLOW-BAYUT-AGENT-PROFILE-TABS
+    category: navigation
+    reason: >
+      "About" / "Properties" / "Transactions" tab labels on the Agent Profile screen
+      (AgentProfileScreen.tap_tab) — switches which read-only section of the agent's
+      own profile is shown, same class of action as ALLOW-BAYUT-SECTION-TABS and
+      ALLOW-BAYUT-AGENCY-DETAIL-TABS above. These labels have no resource-id of their
+      own on this screen (confirmed live 2026-08-10 — see docs/DECISIONS.md D-034),
+      so classification falls back to bare text. Exact-anchored so it can't loosen
+      classification of unrelated text elsewhere in the app that happens to contain
+      these words as a substring.
+    match:
+      text: "^(About|Properties|Transactions)$"
+
+  - id: ALLOW-BAYUT-AGENT-RESULT
+    category: results
+    reason: >
+      Agent name row (tv_agent_name) in an agency's Agents tab — opens the read-only
+      agent profile page. Same class as ALLOW-BAYUT-AGENCY-RESULT; deliberately scoped
+      to the resource-id, not the agent's name text, since a person's name is arbitrary
+      and unsafe to allowlist by text globally. Flagged UNCERTAIN while porting
+      appium/'s test_agency_agent_details.py (docs/DECISIONS.md D-019). Any
+      consequential control on the agent's own profile (Call/Email/WhatsApp) is still
+      caught by its own BLOCK rule regardless of this navigation step.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/tv_agent_name"
+
+  - id: ALLOW-BAYUT-SIGNIN-EMAIL
+    category: navigation
+    reason: >
+      "Continue with Email" (fl_continue_with_email) on the sign-in method screen —
+      opens the email/password sign-in form. Falls through to UNCERTAIN after D-025's
+      fix to BLOCK-LEAD-EMAIL's false positive on this exact element (it isn't a lead
+      action, no rule otherwise covers "continue with X" auth-method buttons).
+      Deliberately scoped to email only — fl_continue_with_whatsapp/_facebook are
+      correctly still BLOCK (their own false-positive class on "whatsapp"/"facebook"
+      substrings, not addressed here; that's a separate, not-yet-requested review).
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/fl_continue_with_email"
+
+  - id: ALLOW-BAYUT-LOGIN-SUBMIT
+    category: navigation
+    reason: >
+      "Log in" (tv_login_button) on the email/password sign-in form — submits sign-in
+      credentials, not a lead or enquiry. Doesn't match BLOCK-FORM-SUBMIT ("submit /
+      send request / send now") or any lead rule; simply uncovered by any ALLOW rule.
+      Note: et_email_field / et_password_field on this same screen are deliberately
+      NOT allowlisted — they're never tapped through safe_tap at all, since typing via
+      send_keys() focuses a field without a preliminary tap. et_email_field in
+      particular should stay BLOCK: a bare "email field" resource-id can't be
+      distinguished from a lead-form's own email field by pattern alone, unlike the
+      unambiguous "continue with email" auth-button phrasing in D-025.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/tv_login_button"
+
+  - id: ALLOW-BAYUT-LOGIN-ANOTHER-ACCOUNT
+    category: navigation
+    reason: >
+      "Log in with another account" (fl_login_button) on the Keycloak "You have
+      previously logged in — continue from where you left off?" interstitial. Appears
+      only when the device already has a cached recent login (e.g. from a prior run of
+      this same suite) — OBSERVED 2026-08-10, see docs/DECISIONS.md D-027. Bypasses the
+      cached-account shortcut to reach the real blank email/password form
+      (EmailLoginScreen), which is what this suite always wants: fresh, typed
+      credentials, never a device-cached SSO continue. Doesn't match BLOCK-LOGOUT
+      (\blog\s*out\b requires "out", not "in") or any other default rule; simply
+      uncovered by any ALLOW rule, same as ALLOW-BAYUT-SIGNIN-EMAIL/-LOGIN-SUBMIT.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/fl_login_button"
+
+  - id: ALLOW-BAYUT-CONFIRM-DIALOG-DECLINE
+    category: navigation
+    reason: >
+      "No" (btn_no) on a confirmation dialog — OBSERVED 2026-08-10 on the "Remove
+      property from Favourites?" prompt (docs/DECISIONS.md D-031), declining the
+      dialog's own destructive action. Declining is safe by category, same reasoning
+      as ALLOW-NAV-BACK's existing "cancel/dismiss/not now" pattern: a confirmation
+      dialog exists specifically so its dangerous branch requires an explicit "Yes",
+      and "No" is that dialog's own built-in refusal — never a path to a lead, a
+      logout, or data loss. Not scoped to text, since generic AlertDialog button ids
+      like this one are commonly reused across every Yes/No confirmation in an app
+      built this way, not just this one dialog.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/btn_no"
+
+block:
+  - id: BLOCK-BAYUT-SAVE-SEARCH
+    category: account_data
+    reason: >
+      "Save" button (save_text_tb_rev_1) on the Properties results screen persists the
+      current search as a Saved Search on the account — real server-side data creation,
+      not a local/reversible UI toggle. Flagged UNCERTAIN in the first live crawl;
+      explicitly blocked per this session's constraint that the crawl must not create or
+      delete anything on the account. Revisit if a seeded/disposable test account is
+      ever used instead of the shared QA account.
+    match:
+      resource_id: "com\\.bayut\\.bayutapp:id/save_text_tb_rev_1"

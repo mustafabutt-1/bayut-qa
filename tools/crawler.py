@@ -243,6 +243,8 @@ class CrawlConfig:
     safety_config: str | None = None
     mitm_flow_file: Path | None = None
     settle_seconds: float = 2.0
+    preserve_app_state: bool = False
+    bootstrap_path: list[dict[str, str]] = field(default_factory=list)
 
 
 class Crawler:
@@ -279,7 +281,11 @@ class Crawler:
             opts.app_activity = self.cfg.activity
         if self.cfg.serial:
             opts.udid = self.cfg.serial
-        opts.no_reset = False
+        # False (default) wipes app data at session start — the correct behaviour for a
+        # genuine first-ever crawl. True skips the wipe, so a crawl can resume against
+        # app state left by a prior onboarding walkthrough or an earlier crawl segment,
+        # instead of re-facing a one-time onboarding flow it cannot get past on its own.
+        opts.no_reset = self.cfg.preserve_app_state
         opts.new_command_timeout = int(os.environ.get("APPIUM_NEW_COMMAND_TIMEOUT", "120"))
         opts.auto_grant_permissions = False  # never silently grant; permissions are a test surface
         server = os.environ.get("APPIUM_SERVER_URL", "http://127.0.0.1:4723")
@@ -362,9 +368,30 @@ class Crawler:
         time.sleep(self.cfg.settle_seconds)
 
     def _reset_to_home(self) -> None:
-        self.adb.reset_app(self.cfg.package)
+        """Force-stop + relaunch — deliberately *not* `pm clear`.
+
+        Bayut's onboarding (region/purpose questions, tracking-permission prompt) is
+        one-time-only, gated on app data, not on process state. `pm clear` here would
+        wipe that flag on every dead-end recovery and every queued-path replay, so the
+        crawl would face onboarding again on its very next reset and could never reach
+        anything past it. A clean process restart still guarantees known state (no
+        stale UI, no leftover dialogs) without re-triggering first-run flows.
+        """
+        self.adb.stop_app(self.cfg.package)
         self.adb.launch_app(self.cfg.package, self.cfg.activity)
         time.sleep(self.cfg.settle_seconds * 2)
+        # A cold relaunch lands on the app's own default screen (its default tab),
+        # which is not necessarily where this crawl actually started — e.g. when
+        # --preserve-app-state was bootstrapped into a specific section by hand
+        # before the crawl began. Replay that bootstrap here so every reset returns
+        # to the crawl's real starting point, not the app's.
+        for step in self.cfg.bootstrap_path:
+            elements, _, _ = self._capture("bootstrap")
+            target = _find_step(elements, step)
+            if target is None:
+                break
+            if not self._tap(target):
+                break
 
     # -- traversal -------------------------------------------------------
 
@@ -418,6 +445,20 @@ class Crawler:
                     if not self._tap(el):
                         continue
                     new_elements, new_fp, new_ps = self._capture(f"d{len(path) + 1}")
+                    if new_elements and not any(e.package == self.cfg.package for e in new_elements):
+                        # The tap (or something racing it, e.g. a heads-up notification
+                        # from an unrelated app intercepting the tap coordinates) left
+                        # the app under test entirely. Never record a foreign screen as
+                        # part of this app's map — every element on it would also be
+                        # BLOCK-FOREIGN-PACKAGE if we tried to tap further anyway, but
+                        # recording the screen itself would silently corrupt the graph.
+                        self.model.dead_ends.append({
+                            "from": origin.fingerprint, "via": el.label,
+                            "landed_on": new_fp,
+                            "reason": "tap left the app under test (foreign package); not recorded",
+                            "at": _now()})
+                        self._reset_to_home()
+                        break
                     if new_fp != origin.fingerprint:
                         is_new = self.model.add_screen(
                             self._record_screen(new_elements, new_fp, _describe(path + [step]), new_ps)
@@ -428,6 +469,13 @@ class Crawler:
                             queue.append((path + [step], new_fp))
                         self._back()
                         back_elements, back_fp, _ = self._capture("back")
+                        if back_fp == new_fp and back_fp != origin.fingerprint:
+                            # Back had no visible effect at all — commonly a screen
+                            # that auto-focused a text field, so the first back only
+                            # dismissed the IME keyboard rather than navigating. One
+                            # more back before treating this as a genuine dead end.
+                            self._back()
+                            back_elements, back_fp, _ = self._capture("back")
                         if back_fp != origin.fingerprint:
                             self.model.dead_ends.append({
                                 "from": origin.fingerprint, "via": el.label,
@@ -454,8 +502,18 @@ class Crawler:
         return self.model
 
     def _navigate(self, path: list[dict[str, str]]) -> bool:
-        """Replay a path from a freshly reset app. Costs actions, guarantees state."""
-        self._reset_to_home()
+        """Replay a path from a freshly reset app. Costs actions, guarantees state.
+
+        The empty path (the root queue item) is the crawl's own starting screen —
+        already captured once, right before the queue was seeded. Resetting for it
+        too would discard that starting position for no replay benefit: with
+        --preserve-app-state the reset lands wherever the app defaults to on a cold
+        relaunch (its default tab), which is not necessarily the screen the crawl
+        actually started from, so every subsequent step in the (empty) path would
+        have nothing to replay against.
+        """
+        if path:
+            self._reset_to_home()
         for step in path:
             if self._budget_left() <= 0:
                 return False
@@ -851,6 +909,12 @@ def _cmd_crawl(args: argparse.Namespace) -> int:
         max_actions=args.max_actions, max_depth=args.max_depth,
         permissive=args.allow_uncertain_taps, safety_config=args.safety_config,
         mitm_flow_file=Path(args.mitm_flow_file) if args.mitm_flow_file else None,
+        preserve_app_state=args.preserve_app_state,
+        bootstrap_path=(
+            [{"strategy": "accessibility id", "value": args.bootstrap_content_desc,
+              "label": args.bootstrap_content_desc}]
+            if args.bootstrap_content_desc else []
+        ),
     )
     if cfg.permissive:
         print("\n" + "!" * 78)
@@ -908,6 +972,17 @@ def build_parser() -> argparse.ArgumentParser:
     cr.add_argument("--max-depth", type=int, default=DEFAULT_DEPTH)
     cr.add_argument("--mitm-flow-file", default=os.environ.get("MITM_FLOW_FILE"),
                     help="mitmdump -w output; watched to detect certificate pinning early")
+    cr.add_argument("--preserve-app-state", action="store_true",
+                    help="skip the session-start data wipe; resume against whatever state "
+                         "the app is already in (e.g. onboarding already completed by hand) "
+                         "instead of facing a one-time onboarding flow the crawler can't "
+                         "get past on its own")
+    cr.add_argument("--bootstrap-content-desc", default=None,
+                    help="accessibility-id of an element to tap once after every reset, "
+                         "before replaying the rest of a queued path — e.g. 'Properties', "
+                         "so a crawl bootstrapped into a non-default section (via "
+                         "--preserve-app-state) keeps returning there instead of to the "
+                         "app's own default tab")
     cr.set_defaults(func=_cmd_crawl)
     return p
 

@@ -1,6 +1,12 @@
 # Secrets
 .env
 
+# Pre-existing standalone Appium suite (Maestro-comparison prototype). Has real test
+# account email/phone inline in source rather than in .env — see docs/DECISIONS.md D-019.
+# Ignored here rather than scrubbed in place so the original, as-run files stay intact
+# for reference; the hardened equivalents live under tests/suites/.
+/appium/
+
 # Run artifacts — large, per-run, not source of truth
 runs/*
 !runs/.gitkeep

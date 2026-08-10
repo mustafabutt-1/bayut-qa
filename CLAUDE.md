@@ -45,6 +45,7 @@ damage, and the one mistake that ends this programme.
 |---|---|
 | **`docs/PROJECT-STATE.md`** | **Where are we? What is built? What is next?** Start here. |
 | `docs/PROMPTS.md` | Copy-paste session prompts — onboarding, crawl, review, probe, build. |
+| `docs/REGRESSION-CHECKLIST.md` | The manual QA team's own regression checklist — human-authored, not a crawler output. High-trust cross-check for `context/feature-map.md`. |
 | `docs/SETUP.md` | How do I get this running on a new machine? |
 | `docs/ARCHITECTURE.md` | How does it work, and why is it shaped this way? |
 | `docs/DECISIONS.md` | Why was this decided? Append-only, never rewritten. |
