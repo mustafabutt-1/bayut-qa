@@ -138,7 +138,7 @@ Before every crawl session, and after any change to `crawl_safety.py`:
 
 ```bash
 python tools/crawl_safety.py selftest
-#   expect: 117/117 assertions passed
+#   expect: 119/119 assertions passed
 #           default environment : production
 #           lead allowlist      : ['Explorer Real Estate']
 ```

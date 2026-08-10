@@ -49,7 +49,7 @@ damage, and the one mistake that ends this programme.
 
 - Every tap in `crawler.py` and `prober.py` goes through `crawl_safety.SafetyPolicy`.
   There is no second tap path and no flag that disables the blocklist.
-- Run `python tools/crawl_safety.py selftest` before every crawl session. Must be 117/117.
+- Run `python tools/crawl_safety.py selftest` before every crawl session. Must be 119/119.
 - STRICT by default: an element matching no allow rule is logged, not tapped.
 - Screenshot before every tap. Max 1 action / 800ms. Hard stop at 400 actions.
 - Uncertain? Do not tap. A missed screen is cheap; a hundred spurious leads is not.
@@ -61,9 +61,9 @@ damage, and the one mistake that ends this programme.
 |---|---|
 | **`docs/PROJECT-STATE.md`** | **Where are we? What is built? What is next?** Start here. |
 | **`docs/GUARDRAILS.md`** | **Production policy: environment, data creation, leads.** Binding. |
-| `context/regression-checklist.md` | The team's own regression checklist — evidence that outranks every hypothesis. |
 | `docs/PROMPTS.md` | Copy-paste session prompts — onboarding, crawl, review, probe, build. |
-| `docs/REGRESSION-CHECKLIST.md` | The manual QA team's own regression checklist — human-authored, not a crawler output. High-trust cross-check for `context/feature-map.md`. |
+| `docs/REGRESSION-CHECKLIST.md` | The QA team's own checklist, verbatim. Human-authored, high-trust — outranks every `[ASSUMED]` hypothesis. |
+| `context/checklist-corrections.md` | What that checklist proves wrong about `context/` — 9 corrections, 13 unmapped feature areas. |
 | `docs/SETUP.md` | How do I get this running on a new machine? |
 | `docs/ARCHITECTURE.md` | How does it work, and why is it shaped this way? |
 | `docs/DECISIONS.md` | Why was this decided? Append-only, never rewritten. |
@@ -81,9 +81,9 @@ bayut-qa/
 ├── .claude/agents/        agent definitions (see agents/README.md for status)
 ├── tools/                 deterministic CLIs — the agents' hands
 ├── tests/
-│   ├── conftest.py            PLACEHOLDER — raises until Phase 2
+│   ├── conftest.py            driver, reset, capture, artifact routing
 │   ├── screen_objects/        page objects, explicit waits only
-│   ├── suites/                test suites by feature area
+│   ├── suites/                30+ tests, checklist-numbered modules
 │   └── fixtures/              synthetic page sources for offline tool testing
 ├── templates/             BUG / TEST-DEFECT / CHARTER / EOD formats (pending)
 ├── runs/                  per-run artifacts: runs/<run_id>/<test_id>/
@@ -103,10 +103,16 @@ bayut-qa/
 | `tools/crawler.py` | PASSIVE crawl → screen/element inventory, screen graph, locator quality, listing-ID visibility, blocked/uncertain logs. |
 | `tools/prober.py` | PROBE P1–P7 → filter behaviour from result-count deltas, raw counts always recorded. |
 
-**Execution (Phase 1) — NOT built yet.** `testmo_client.py`, `clickup_client.py`,
-`evidence.py`, `pairwise.py`, `oracle.py`, `har_diff.py`. The last two deliberately wait
-on the first crawl: it decides whether the API is interceptable and whether exact
-listing-ID matching is possible.
+**Test suite (Phase 1) — built and run against the real app.** `tests/screen_objects/`
+(Page Object Model, one class per screen) and `tests/suites/` (30+ tests in
+checklist-numbered modules). `safe_tap()` is the only tap path; `deliberate_tap()` is the
+one narrow, evidenced exception for genuinely consequential actions, always screenshotted
+and logged. Consequential tests are gated behind `RUN_CONSEQUENTIAL_TESTS=1`.
+
+**Still NOT built.** `testmo_client.py`, `clickup_client.py`, `evidence.py`,
+`pairwise.py`, `oracle.py`, `har_diff.py`. The last two deliberately wait on a pinning
+verdict: it decides whether the API is interceptable and whether exact listing-ID
+matching is possible.
 
 ## Conventions for anything written here
 

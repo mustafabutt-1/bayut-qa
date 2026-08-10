@@ -1,16 +1,18 @@
-# Regression Checklist — Ground Truth
+# Checklist Corrections — what the regression checklist changes
 
-Extracted from **"Bayut UAE Regression Checklist"** (PDF, supplied by the QA lead
-2026-08-09). This is the team's own document, so it is **evidence, not inference** — it
-outranks every `[ASSUMED — verify]` hypothesis in `feature-map.md`,
-`filter-inventory.md`, `screen-inventory.md` and `terminology.md`.
+**Companion to `docs/REGRESSION-CHECKLIST.md`**, which is the verbatim, human-authored
+transcription of the QA team's own checklist. That file is the *source*; this file is the
+*analysis* — specifically, what the checklist proves wrong about the Phase 0 hypotheses in
+`context/`, and which feature areas it reveals that were never mapped.
 
-**Credentials warning.** The source PDF contains six sets of live test-account
-credentials. They are deliberately **not reproduced here**. Store them in `.env`
-(gitignored) and reference by variable name. See `docs/GUARDRAILS.md` §4.
+Read the source first. Nothing here restates it; this only records the deltas, so it stays
+useful after the source is fully absorbed.
 
-Tag: `[OBSERVED — regression checklist 2026-08-09]` throughout. Where the checklist is
-silent, the item stays UNKNOWN rather than being filled in.
+Tag: `[OBSERVED — regression checklist 2026-08-09]`. Where the checklist is silent, the
+item stays UNKNOWN rather than being filled in.
+
+**Credentials.** Neither file contains any. Accounts are referenced by `.env` variable
+name only — see `docs/GUARDRAILS.md` section 4.
 
 ---
 
@@ -117,20 +119,11 @@ deterministic, checkable, and currently manual.
 
 ---
 
-## 5. Test data (values only — credentials live in `.env`)
+## 5. Test data
 
-| Purpose | Value |
-|---|---|
-| Test location for lead verification | **Al Napoca** |
-| Test agency for lead verification | **Explorer Real Estate** |
-| Test portfolio account | `$TEST_PORTFOLIO_EMAIL` / `$TEST_PORTFOLIO_PASSWORD` |
-| Admin accounts (2) | `$TEST_ADMIN_1_EMAIL` / `$TEST_ADMIN_1_PASSWORD`, `$TEST_ADMIN_2_*` |
-| Agent accounts (2) | `$TEST_AGENT_1_*`, `$TEST_AGENT_2_*` |
-
-Both Al Napoca and Explorer Real Estate are wired into `tools/crawl_safety.py` as
-`LEAD_TEST_LOCATION` and `LEAD_TEST_AGENCIES`.
-
----
+Owned by `docs/REGRESSION-CHECKLIST.md` and its `.env` appendix — not duplicated here.
+The two values wired into `tools/crawl_safety.py` are `LEAD_TEST_LOCATION = "Al Napoca"`
+and `LEAD_TEST_AGENCIES = ("Explorer Real Estate",)`.
 
 ## 6. Regression realities that constrain automation
 

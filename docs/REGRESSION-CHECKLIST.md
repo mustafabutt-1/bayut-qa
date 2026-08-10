@@ -674,12 +674,13 @@ per the P1 session rule ("do not modify context/ files" without approval).
   > `<.env: TEST_ACCOUNT_PORTFOLIO_EMAIL>` / `<.env: TEST_ACCOUNT_PORTFOLIO_PASSWORD>`.
   > Figma attached for reference in the original doc (not captured here).
   >
-  > **Discrepancy observed in the source doc:** the "Admins" account
-  > `sectorlabs-automation+agent@sectorlabs.ro` is listed with password
-  > `Testaccount123!` in the Admin Claims section, but the apparently-same account
-  > (`Automation+agent@sectorlabs.ro`) is listed with password `Testaccount12345!`
-  > here in Find My Agent. Not resolved — verify which is current before relying on
-  > either.
+  > **Discrepancy observed in the source doc:** the Admin Claims section and the Find
+  > My Agent section list what appears to be the **same account** (the addresses differ
+  > only by a `sectorlabs-automation+` vs `Automation+` prefix) with **two different
+  > passwords**. Compare `<.env: TEST_ACCOUNT_ADMIN1_PASSWORD>` against
+  > `<.env: TEST_ACCOUNT_AGENT_FMA_PASSWORD>` in your local `.env`. Not resolved —
+  > verify which is current before relying on either. The actual values are
+  > deliberately not reproduced here.
 
 ---
 

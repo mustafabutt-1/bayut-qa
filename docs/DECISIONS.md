@@ -575,7 +575,11 @@ the correct direction — most assumed constraints turn out to be ALLOWED_EMPTY.
 
 ## Guardrails — production testing
 
-### D-015 · 2026-08-09 · The environment is production by default, in code
+> Renumbered D-035..D-037 on merge: these were authored as D-015..D-017 on a second
+> machine at the same time as the live-crawl session claimed D-014..D-034. Same-numbered
+> decisions with different content is the one thing an append-only log must never have.
+
+### D-035 · 2026-08-09 · The environment is production by default, in code
 **Decision.** `SafetyPolicy` defaults to `environment="production"`, and so does every
 tool. Staging requires an explicit `--environment staging`. No auto-detection.
 **Rationale.** The QA lead's instruction was to treat it as production until told
@@ -586,7 +590,7 @@ forgotten on the one run where it matters.
 on production is read-path automation, and that limit should be stated plainly rather
 than papered over.
 
-### D-016 · 2026-08-09 · Data creation is blocked by environment, not by discipline
+### D-036 · 2026-08-09 · Data creation is blocked by environment, not by discipline
 **Decision.** Eleven `PROD-BLOCK-*` rules block sign-up, saved searches, favourites,
 TruEstimate generation, Portfolio, claims, seller leads, BayutGPT, profile edits and
 sharing while the environment is production. They lift on staging.
@@ -597,7 +601,7 @@ production account.
 stays reachable, the favourite heart does not. Blocking destinations too would make half
 the app unmappable for no safety gain, so seven selftest cases assert that distinction.
 
-### D-017 · 2026-08-09 · The lead exemption reads the screen; the caller cannot assert
+### D-037 · 2026-08-09 · The lead exemption reads the screen; the caller cannot assert
 **Decision.** Lead controls are blocked everywhere. The single exemption is
 `policy.lead_test(elements)`, which parses the live page source and finds an allowlisted
 agency itself. `LEAD_TEST_AGENCIES = ("Explorer Real Estate",)`.
@@ -606,3 +610,22 @@ stale assumption send an enquiry to a real brokerage. Making the gate do its own
 observation applies "evidence over inference" to the most expensive action in the system.
 **Consequence.** Scoped to a context manager, covers `lead_contact` rules only, cannot
 leak past the block — all asserted in the selftest. Crawler and prober never call it.
+
+### D-038 · 2026-08-10 · `deliberate_tap()` is an exception to the refusal, not to the verification
+**Decision.** `deliberate_tap()` now classifies the exact element it is about to click
+and, when that element is a `lead_contact` control (or the call site tags itself
+`...lead...`), requires `policy.authorise_lead()` to find an allowlisted agency in the
+live page source before the click happens.
+**Rationale.** Two safety models met at the merge. D-019's `deliberate_tap()` is the
+sanctioned escape hatch for genuinely consequential actions, guarded by a mandatory
+reason plus screenshot and log. D-037's lead gate verifies the agency by reading the
+screen. They did not compose: `deliberate_tap()` bypassed the policy entirely, so it
+would have tapped a lead CTA on *any* agency. The existing lead test does assert
+`assert_agency_name_visible(AGENCY)` first — correct, and the two machines reached the
+same conclusion independently — but that assertion lives in the test, so the next test to
+forget it would have had no protection at all.
+**Consequence.** The guarantee now belongs to the tap rather than to the caller's
+discipline. Evidence gained a `lead_agency_verified` field, so every consequential lead
+in `runs/consequential-evidence/log.jsonl` records which agency was confirmed on screen
+at the moment of the tap. Classification targets the element by resource-id per D-024 and
+D-034; the tag check is the deliberate backstop for when a driver call fails mid-flow.

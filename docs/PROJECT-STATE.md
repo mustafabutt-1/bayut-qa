@@ -23,7 +23,7 @@ All five context tools run end-to-end with no device, against `tests/fixtures/`.
 | Tool | Lines | Verified by |
 |---|---|---|
 | `tools/pagesource.py` | 415 | fingerprint + diff across EN/AR fixtures |
-| `tools/crawl_safety.py` | 790 | `selftest` — **117/117 assertions** (19 block + 11 production-block + 10 allow rules, plus the lead gate) |
+| `tools/crawl_safety.py` | 790 | `selftest` — **119/119 assertions** (19 block + 11 production-block + 10 allow rules, plus the lead gate) |
 | `tools/adb.py` | 684 | `--dry-run` across every subcommand |
 | `tools/crawler.py` | 925 | `offline` mode → all 7 reports generated |
 | `tools/prober.py` | 767 | `selftest` — **28/28 assertions** |
@@ -31,7 +31,7 @@ All five context tools run end-to-end with no device, against `tests/fixtures/`.
 Reproduce all of it in about 20 seconds:
 
 ```bash
-python tools/crawl_safety.py selftest          # expect 117/117
+python tools/crawl_safety.py selftest          # expect 119/119
 python tools/prober.py selftest                # expect 28/28
 python tools/crawler.py offline --fixtures-dir tests/fixtures/page_source --out /tmp/check
 python tools/crawl_safety.py --app-package com.bayut.app check \
