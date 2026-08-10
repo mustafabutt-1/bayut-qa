@@ -50,7 +50,7 @@ def test_sign_out_is_blocked_outside_a_consequential_test(home_screen):
     more = home_screen.open_more()
     if not more.is_signed_in():
         pytest.skip("signed out — no Log Out control on screen")
-    more.scroll_into_view_by_text("Log Out")
+    assert more.scroll_to_row("Log Out"), "signed in, but no Log Out row found"
     more.assert_blocked(text="Log Out")
 
 
@@ -62,7 +62,6 @@ def test_manage_alerts_entry_is_present(home_screen):
     Alerts feature area stays manual on production (docs/GUARDRAILS.md).
     """
     more = home_screen.open_more()
-    more.scroll_into_view_by_text("Manage Alerts")
-    assert more.is_present(text="Manage Alerts"), (
-        "'Manage Alerts' row not found on the More screen"
+    assert more.scroll_to_row("Manage Alerts"), (
+        "'Manage Alerts' row not found on the More screen after scrolling from the top"
     )

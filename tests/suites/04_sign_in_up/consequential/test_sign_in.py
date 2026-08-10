@@ -31,7 +31,7 @@ the fold in the More menu) — manual swipe + is_present, not UiAutomator2's
 scrollIntoView, see D-024 for why — but that scroll only ever happens once
 is_signed_in() has already confirmed there's a reason to.
 
-Test account: TEST_ACCOUNT_PORTFOLIO_EMAIL (demo@sectorlabs.ro) — the QA team's own
+Test account: TEST_ACCOUNT_PORTFOLIO_EMAIL — the QA team's own
 sectorlabs.ro test account from docs/REGRESSION-CHECKLIST.md. TEST_ACCOUNT_PORTFOLIO_PASSWORD
 must also be set in .env for this test — it is not invented here, and is left blank in
 .env.example/.env until supplied.

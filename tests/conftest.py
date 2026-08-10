@@ -143,9 +143,21 @@ def home_screen(driver, safety_policy):
     for _ in range(8):
         if screen.is_displayed(timeout=1):
             break
-        try:
-            nav.safe_tap(accessibility_id="Home", timeout=2)
+
+        # Already on Home, just scrolled? is_displayed() looks for the header
+        # (properties_tab), so a Home scrolled past its own header is indistinguishable
+        # from "not on Home" — and tapping the Home tab does NOT reset scroll position,
+        # because bottom_nav_home_id is not even clickable while Home is the selected
+        # tab. Without this, any test that leaves Home scrolled strands every test after
+        # it. Cheap to attempt and a no-op anywhere else.
+        screen.swipe_down_to_top()
+        if screen.is_displayed(timeout=1):
             break
+
+        try:
+            # resource-id, not the "Home" content-desc: content-desc is localized and
+            # would stop resolving in ar/ru/zh.
+            nav.safe_tap(resource_id=HomeScreen.NAV_HOME, timeout=2)
         except (TimeoutException, AssertionError):
             driver.back()
 
@@ -165,5 +177,19 @@ def home_screen(driver, safety_policy):
 @pytest.fixture
 def properties_screen(home_screen):
     """Properties results (LPV) — the shared starting point for most suites below.
-    Idempotent: tapping the bottom-nav Properties icon is harmless if already there."""
-    return home_screen.open_properties()
+
+    Idempotent: tapping the bottom-nav Properties icon is harmless if already there.
+
+    Also clears any location left applied by a previous test. The app persists the last
+    search, so without this a single test that applies a filter silently changes what
+    every later test is looking at — observed 2026-08-11, when one location-applying
+    test caused seven unrelated failures. Isolation belongs in the fixture, not in each
+    test's good intentions: the next state-mutating test should not have to remember.
+
+    Costs one page-source read per test, and only pays for a real reset when the state
+    is actually dirty.
+    """
+    screen = home_screen.open_properties()
+    if screen.ensure_default_location():
+        print("    note: cleared a location left applied by a previous test")
+    return screen

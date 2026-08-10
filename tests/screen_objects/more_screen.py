@@ -14,8 +14,20 @@ class MoreScreen(BaseScreen):
     SIGN_IN_BUTTON = "com.bayut.bayutapp:id/more_user_btn"
     LOGGED_IN_USER_CONTAINER = "com.bayut.bayutapp:id/logged_in_user_container"
 
-    def is_displayed(self) -> bool:
-        return self.is_present(resource_id=self.BOTTOM_NAV_MORE)
+    #: The More menu's own container. Unlike BOTTOM_NAV_MORE this exists ONLY on More.
+    MORE_ITEMS_LIST = "com.bayut.bayutapp:id/more_items_list"
+
+    def is_displayed(self, timeout: int = 10) -> bool:
+        """True only when the More screen itself is up.
+
+        Previously this checked BOTTOM_NAV_MORE — but the bottom nav is present on
+        *every* bottom-nav screen, so it returned True while still on Home, before the
+        tap had landed. Callers then read More-specific state too early: `is_signed_in()`
+        found neither the Sign In button nor the account row and raised its
+        "can't determine sign-in state" error, which looked like a real finding and was
+        actually a race. `more_items_list` exists only on More.
+        """
+        return self.is_present(resource_id=self.MORE_ITEMS_LIST, timeout=timeout)
 
     def is_signed_in(self, timeout: int = 5) -> bool:
         """Authoritative, scroll-free sign-in signal — OBSERVED 2026-08-10, build
@@ -45,14 +57,28 @@ class MoreScreen(BaseScreen):
         )
 
     # --- §21 More screen sections -----------------------------------------
-    # Labels come from the checklist itself, so text matching is legitimate here: the
-    # checklist specifies the wording. Still English-only — the Localization section
-    # (§23) covers the other three locales and is blocked on the locale-switch decision.
+    # Rows are LOCATED by resource-id (`more_item_parent` wrapping `item_text`); their
+    # text is then read as an assertion *value*. That distinction matters: locating by
+    # label would break in ar/ru/zh, but the checklist item genuinely is "does the More
+    # screen offer these sections", and a section is named by its label.
+    #
+    # LOCATOR-QUALITY FINDING: every row shares the same two ids, so there is no way to
+    # identify *which* row is which except by its text. That belongs in the testID ask —
+    # a per-row id (more_item_activity_log, more_item_settings, ...) would make this
+    # locale-proof. Recorded in context/locator-quality.md.
+    ROW_CONTAINER = "com.bayut.bayutapp:id/more_item_parent"
+    ROW_LABEL = "com.bayut.bayutapp:id/item_text"
+    ACTIVITY_CARD_TITLE = "com.bayut.bayutapp:id/tv_my_activity"
+    APP_VERSION = "com.bayut.bayutapp:id/tv_app_version"
+
+    # OBSERVED 2026-08-10, build 15.7.2 (1272), signed out, en-GB. Corrected against the
+    # live screen: the app says "My Activity", not the checklist's "Activity Log", and
+    # TruEstimate carries a ™ — hence the symbol-stripping in _normalise().
     SECTIONS_UNSIGNED: tuple[str, ...] = (
-        "Activity Log", "Sell My Property", "Dubai Transactions", "TruEstimate",
-        "Find my Agent", "Favourites", "Floor Plans", "Language", "Manage Alerts",
-        "Notification Center", "Blog", "Guides", "Settings", "Contact Us",
-        "About Us", "Privacy Policy",
+        "My Activity", "Sell My Property", "Dubai Transactions", "TruEstimate",
+        "TruEstimate Portfolio", "Favourites", "Saved Searches", "Find my Agent",
+        "Floor Plans", "Language", "Manage Alerts", "Notification Center",
+        "Blog", "Guides", "Settings", "Contact Us", "About Us", "Privacy Policy",
     )
     SECTIONS_SIGNED_IN: tuple[str, ...] = SECTIONS_UNSIGNED + ("Log Out",)
 
@@ -67,33 +93,80 @@ class MoreScreen(BaseScreen):
         "My TruEstimate Reports",   # signed-in only
     )
 
+    @staticmethod
+    def _normalise(label: str) -> str:
+        """Fold away casing, whitespace and decorative symbols.
+
+        The app renders "TruEstimate™‎" — a trademark sign plus a left-to-right
+        mark, the latter invisible and easy to miss when eyeballing a diff. Comparing
+        raw strings against a checklist written without them fails for no real reason.
+        """
+        import re
+        return re.sub(r"[^a-z0-9]", "", label.lower())
+
     def visible_section_labels(self, max_swipes: int = 12) -> list[str]:
-        """Scroll More top-to-bottom and collect every visible text label, in order."""
+        """Scroll More top-to-bottom and collect the section labels, in order.
+
+        Reads only elements located by resource-id — the menu rows (`item_text`) and the
+        Activity card's own title (`tv_my_activity`) — rather than hoovering up every
+        string on screen. That keeps the promotional blurb, the version footer and the
+        bottom-nav labels out of the result.
+        """
         self.swipe_down_to_top()
+        wanted = {self.ROW_LABEL, self.ACTIVITY_CARD_TITLE}
         labels: list[str] = []
         for _ in range(max_swipes):
-            for el in sorted((e for e in self.current_elements() if e.bounds),
-                             key=lambda e: e.bounds[1]):
-                text = (el.text or el.content_desc or "").strip()
+            # Count BEFORE collecting, not after. The previous version took `before`
+            # after the collection loop and compared it to the same unchanged list, so
+            # the two were always equal and it stopped after a single screenful —
+            # reporting 10 of the 18 sections as missing when every one was present.
+            before = len(labels)
+            rows = [e for e in self.current_elements()
+                    if e.resource_id in wanted and e.text and e.bounds]
+            for el in sorted(rows, key=lambda e: e.bounds[1]):
+                text = el.text.strip()
                 if text and text not in labels:
                     labels.append(text)
-            before = len(labels)
+            if len(labels) == before and before:
+                break  # a full screenful added nothing new; we are at the bottom
             self.swipe_up()
-            if len(labels) == before:
-                break  # nothing new came into view; we are at the bottom
         return labels
 
     def missing_sections(self, expected: tuple[str, ...],
                          labels: list[str] | None = None) -> list[str]:
-        """Which expected sections are not present. Case- and spacing-insensitive."""
+        """Which expected sections are not present, ignoring case/spacing/symbols."""
         found = labels if labels is not None else self.visible_section_labels()
-        norm = {"".join(l.lower().split()) for l in found}
-        return [s for s in expected if "".join(s.lower().split()) not in norm]
+        norm = {self._normalise(l) for l in found}
+        return [s for s in expected if self._normalise(s) not in norm]
 
     def open_activity_log(self):
+        """The My Activity card sits at the top of More, above the menu rows.
+
+        Scrolls to top first: More retains its scroll position between visits, so after
+        any test that scrolled down to reach a lower row (Manage Alerts, Find my Agent)
+        the card is off-screen and a plain tap times out. Cheap, and a no-op when
+        already at the top.
+        """
         from .activity_log_screen import ActivityLogScreen
+        self.swipe_down_to_top()
         self.safe_tap(resource_id=self.ACTIVITY_LOG_CARD)
         return ActivityLogScreen(self.driver, self.safety_policy, self.timeout)
+
+    def scroll_to_row(self, label: str, max_swipes: int = 12) -> bool:
+        """Bring a More row into view, always starting from the top.
+
+        More retains its scroll position between visits, and UiAutomator2's
+        scrollIntoView only searches *forward* — so a row above the current position is
+        never found, and D-024 records that scrollIntoView can even return the wrong
+        element rather than failing cleanly. Resetting to the top first makes the search
+        deterministic regardless of what the previous test left behind.
+        """
+        self.swipe_down_to_top()
+        for _ in range(max_swipes):
+            if self.is_present(text=label, timeout=1):
+                return True
+            self.swipe_up()
+        return self.is_present(text=label, timeout=1)
 
     def open_favourites(self):
         from .favourites_screen import FavouritesScreen

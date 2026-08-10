@@ -30,19 +30,23 @@ class PropertiesResultsScreen(BaseScreen):
     FAVOURITE_CHECKBOX = "com.bayut.bayutapp:id/favourite_cb"
 
     # --- §16 LPV inline widgets -------------------------------------------
-    # Matched on visible text / content-desc / resource-id, NOT on a known widget id:
-    # the crawl's page-source dumps are gitignored, so the container ids for these
-    # widgets have never been observed here. Text matching is locale-fragile — these
-    # only hold in English. Replace each with its resource-id after the first live run
-    # prints them (see test_inline_widgets.py, which reports what it actually matched).
-    # [UNVERIFIED — replace with resource-ids]
-    INLINE_WIDGET_MARKERS: dict[str, str] = {
-        "TruBroker": r"tru\s*broker",
-        "BayutGPT": r"bayut\s*gpt",
-        "TruEstimate": r"tru\s*estimate",
-        "Dubai Transactions": r"dubai\s*transaction",
-        "Alert Me of New Properties": r"alert\s*me\s*of\s*new",
-        "Off-Plan rail": r"off[\s\-_]?plan",
+    # Matched on **resource-id**, never on visible text: a text match would stop working
+    # in ar/ru/zh, three of the app's four shipped locales.
+    #
+    # OBSERVED 2026-08-10, build 15.7.2 (1272), across 18 page-source dumps of a
+    # scrolled LPV: only the TruBroker widget was ever present, as
+    # `cl_trubroker_container`. The other four documented widgets never appeared, which
+    # is consistent with §16 ("only inline filters containing data will be visible") and
+    # with the location gating — the capture had no location applied.
+    #
+    # UNRESOLVED ids are deliberately left as None rather than guessed. A widget with no
+    # id here is reported as un-checkable, not silently treated as absent.
+    INLINE_WIDGET_IDS: dict[str, str | None] = {
+        "TruBroker": "com.bayut.bayutapp:id/cl_trubroker_container",
+        "BayutGPT": None,                    # UNRESOLVED — never observed
+        "TruEstimate": None,                 # UNRESOLVED — never observed
+        "Dubai Transactions": None,          # UNRESOLVED — never observed
+        "Alert Me of New Properties": None,  # UNRESOLVED — never observed
     }
 
     # Checklist §16: documented positions, i.e. the widget appears after the Nth
@@ -54,6 +58,41 @@ class PropertiesResultsScreen(BaseScreen):
         "TruEstimate",          # after listing 7
         "Dubai Transactions",   # after listing 10
     )
+
+    #: What tv_selected_locations reads when NO location is applied. English only —
+    #: see ensure_default_location() for why that is safe here.
+    NO_LOCATION_LABELS: tuple[str, ...] = ("Select location",)
+
+    def ensure_default_location(self) -> bool:
+        """Clear any applied location so the next test starts from a known search.
+
+        The app persists the last search across screens and across tests. Until now
+        every test was read-only navigation, so the suite got away with having no state
+        isolation; the moment one test applied a location filter, seven unrelated tests
+        failed — most visibly the one asserting the eight emirates appear under Popular
+        Locations, because Popular shows *child locations of the applied location*
+        (checklist §13), not the emirates.
+
+        Returns True if it actually reset something, so callers can report it.
+
+        Locale note: the clean-state check compares against an English placeholder. In
+        another locale the label will not match and this resets every time — slower, but
+        it fails **safe** (over-cleaning) rather than open (leaking state into the next
+        test), which is the right direction for an isolation guard.
+        """
+        label = next((e for e in self.current_elements()
+                      if e.resource_id == self.SELECT_LOCATION), None)
+        if label is None:
+            return False  # not on the LPV; nothing to reset
+        if (label.text or "").strip() in self.NO_LOCATION_LABELS:
+            return False  # already clean
+
+        picker = self.open_location_picker()
+        picker.safe_tap(resource_id=picker.RESET)
+        filters = picker.confirm()
+        if not self.is_present(resource_id=self.LISTING_CARD, timeout=5):
+            filters.show_results()
+        return True
 
     def search_locations(self, *names: str, reset_first: bool = True):
         """Apply an exact set of locations and land back on results.
@@ -68,7 +107,17 @@ class PropertiesResultsScreen(BaseScreen):
             picker.safe_tap(resource_id=picker.RESET)
         for name in names:
             picker.select_location(name)
-        return picker.confirm().show_results()
+
+        filters = picker.confirm()
+        # "Done" lands somewhere that depends on where the picker was opened from.
+        # Opened from the Filters sheet it returns there, and the results still need
+        # "Show N properties". Opened from the results screen — this path — it goes
+        # straight back to results, and waiting for that button times out on a screen
+        # that will never show it. Decide from what is actually on screen rather than
+        # assuming one route (OBSERVED 2026-08-11).
+        if self.is_present(resource_id=self.LISTING_CARD, timeout=5):
+            return self
+        return filters.show_results()
 
     def has_inline_widget(self, name: str, max_swipes: int = 12) -> bool:
         """Is a named inline widget anywhere on this result set?"""
@@ -89,8 +138,7 @@ class PropertiesResultsScreen(BaseScreen):
         visible", so a widget being absent is NOT a defect and this returns whatever
         it finds.
         """
-        import re
-
+        known = {rid: name for name, rid in self.INLINE_WIDGET_IDS.items() if rid}
         self.swipe_down_to_top()
         found: list[tuple[str, int]] = []
         seen_names: set[str] = set()
@@ -102,22 +150,27 @@ class PropertiesResultsScreen(BaseScreen):
                 key=lambda e: e.bounds[1],
             )
             for el in elements:
-                haystack = f"{el.text or ''} {el.content_desc or ''} {el.resource_id or ''}"
                 if el.resource_id == self.LISTING_CARD:
                     key = f"{el.bounds[1]}:{(el.text or '')[:24]}"
                     if key not in card_keys:
                         card_keys.append(key)
                     continue
-                for name, pattern in self.INLINE_WIDGET_MARKERS.items():
-                    if name in seen_names:
-                        continue
-                    if re.search(pattern, haystack, re.IGNORECASE):
-                        seen_names.add(name)
-                        found.append((name, len(card_keys)))
-            if len(seen_names) == len(self.INLINE_WIDGET_MARKERS):
+                name = known.get(el.resource_id)
+                if name and name not in seen_names:
+                    seen_names.add(name)
+                    found.append((name, len(card_keys)))
+            if len(seen_names) == len(known):
                 break
             self.swipe_up()
         return found
+
+    def unresolved_widget_names(self) -> list[str]:
+        """Widgets the checklist documents but for which no resource-id is known.
+
+        Reported by the tests so an absent widget is never confused with an
+        un-checkable one.
+        """
+        return [n for n, rid in self.INLINE_WIDGET_IDS.items() if not rid]
 
     def is_displayed(self) -> bool:
         return self.is_present(resource_id=self.SELECT_LOCATION)

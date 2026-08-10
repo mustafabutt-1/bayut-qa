@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import pytest
 
-AGENCY = "Explorer Real Estate"
+from test_data import TEST_AGENCY as AGENCY  # checklist §5 — the only
+# agency any test may touch on production. Never hardcode it again.
 
 # LPV fat-card lead ids, already proven live (properties_results_screen.py). The agency
 # profile reuses the same card component, so these are the same controls.

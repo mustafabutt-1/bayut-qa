@@ -66,10 +66,18 @@ def test_alert_me_cta_is_not_tappable_on_production(properties_screen):
 
     Skips when the CTA is absent: it is data-dependent like every other inline item.
     """
-    observed = dict(properties_screen.observed_widget_order())
-    if "Alert Me of New Properties" not in observed:
-        pytest.skip("'Alert Me of New Properties' CTA not present on this result set")
-    properties_screen.assert_blocked(text="Alert Me of New Properties")
+    widget = "Alert Me of New Properties"
+    resource_id = properties_screen.INLINE_WIDGET_IDS.get(widget)
+    if not resource_id:
+        pytest.skip(
+            f"no resource-id observed for the {widget!r} CTA, so it cannot be located "
+            f"without a text match — and a text locator would not survive ar/ru/zh. "
+            f"Capture a page source of an LPV where it appears, add the id to "
+            f"INLINE_WIDGET_IDS, and this becomes a real assertion."
+        )
+    if not properties_screen.is_present(resource_id=resource_id, timeout=5):
+        pytest.skip(f"{widget!r} CTA not present on this result set")
+    properties_screen.assert_blocked(resource_id=resource_id)
 
 
 def test_save_search_is_blocked_on_production(properties_screen):

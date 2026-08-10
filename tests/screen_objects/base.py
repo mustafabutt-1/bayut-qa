@@ -229,6 +229,87 @@ class BaseScreen:
             f"as consequential; this is a real finding, not a test bug"
         )
 
+    def safe_tap_row_containing(self, label_resource_id: str, text: str,
+                                timeout: int | None = None):
+        """Tap a clickable ROW that has no id of its own, identified by a labelled child.
+
+        Some list rows in this app expose no resource-id at all — the location-picker
+        suggestions are the worst case: the clickable row is anonymous and the name sits
+        on a non-clickable `tv_title` inside it. That defeats a plain locator two ways:
+
+          * `safe_tap(resource_id=...)` has nothing to aim at, and
+          * `safe_tap(text=...)` matches the *search input* instead, because after
+            typing, the input carries the same string — a silent wrong-element tap of
+            exactly the kind D-024/D-034 warn about.
+
+        So the row is located by hierarchy — UiAutomator's `clickable(true)` +
+        `childSelector(...)`, third in CLAUDE.md's locator priority and well above XPath
+        — and the element that gets *classified* is the labelled child, which is the one
+        carrying the semantic identity the safety policy can reason about.
+
+        LOCATOR-QUALITY FINDING: selecting a location is the single most common action
+        in this app and it has no stable identifier. That belongs at the top of the
+        testID ask.
+        """
+        from appium.webdriver.common.appiumby import AppiumBy
+
+        elements = self.current_elements()
+        label = next((e for e in elements
+                      if e.resource_id == label_resource_id and e.text == text and e.bounds),
+                     None)
+        if label is None:
+            raise AssertionError(
+                f"no {label_resource_id} carrying text {text!r} is on screen"
+            )
+
+        # Classify the LABEL — it is the element carrying semantic identity. The row
+        # itself has no id, no text and no content-desc, so it is unclassifiable by
+        # design and would always come back UNCERTAIN.
+        allowed, decision = self.safety_policy.may_tap(label)
+        if decision.verdict != "ALLOW":
+            raise SafetyRefusal(
+                f"refusing to tap the row for {text!r}: safety verdict "
+                f"{decision.verdict} ({decision.rule_id or 'no matching rule'})"
+            )
+
+        escaped = text.replace('"', '\\"')
+        selector = (
+            f'new UiSelector().clickable(true).childSelector('
+            f'new UiSelector().resourceId("{label_resource_id}").text("{escaped}"))'
+        )
+        try:
+            web_el = WebDriverWait(self.driver, 5).until(
+                lambda d: d.find_element(AppiumBy.ANDROID_UIAUTOMATOR, selector)
+            )
+            web_el.click()
+            return decision
+        except TimeoutException:
+            pass
+
+        # Fallback: resolve the row by HIERARCHY CONTAINMENT — the smallest clickable
+        # element whose bounds enclose the label. UiAutomator's childSelector does not
+        # match this app's suggestion rows (confirmed live), and containment is still a
+        # structural relationship read from the tree, not a guessed screen position.
+        # The tap is by coordinate only because the row exposes nothing to address it
+        # by; same forced-hand situation as the favourite heart in D-031.
+        lx1, ly1, lx2, ly2 = label.bounds
+        rows = [e for e in elements
+                if e.clickable and e.bounds
+                and e.bounds[0] <= lx1 and e.bounds[1] <= ly1
+                and e.bounds[2] >= lx2 and e.bounds[3] >= ly2]
+        if not rows:
+            raise AssertionError(
+                f"found the label {text!r} but no clickable row encloses it — cannot "
+                f"determine what to tap"
+            )
+        row = min(rows, key=lambda e: e.area)
+        point = row.center
+        assert point is not None, f"enclosing row for {text!r} has no usable bounds"
+        print(f"    note: tapping {text!r} via enclosing clickable row "
+              f"(no resource-id on the row itself — locator-quality finding)")
+        self.tap_at(*point)
+        return decision
+
     def back(self) -> None:
         """Device back gesture — not a tap on a classified element, so not safety-gated
         the same way; this is the same primitive tools/crawler.py uses for navigation."""

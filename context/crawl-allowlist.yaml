@@ -195,6 +195,16 @@ allow:
     match:
       resource_id: "com\\.bayut\\.bayutapp:id/btn_no"
 
+  - id: ALLOW-BAYUT-LOCATION-SUGGESTION
+    category: search
+    reason: >
+      Location-picker suggestion row. Choosing a location is read-only search setup —
+      it creates nothing and contacts no one. Classified on the row's label
+      (tv_title/tv_subtitle) because the clickable row itself carries NO resource-id at
+      all; see BaseScreen.safe_tap_row_containing() and the locator-quality note there.
+    match:
+      resource_id: 'com\.bayut\.bayutapp:id/tv_(title|subtitle)$'
+
 block:
   - id: BLOCK-BAYUT-SAVE-SEARCH
     category: account_data

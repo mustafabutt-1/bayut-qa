@@ -25,10 +25,20 @@ def test_buy_rent_and_search_bar_present(home_screen):
 
 
 def test_bottom_nav_present(home_screen):
-    assert home_screen.is_present(accessibility_id=home_screen.NAV_PROPERTIES)
-    assert home_screen.is_present(accessibility_id=home_screen.NAV_TRANSACTIONS)
-    assert home_screen.is_present(accessibility_id=home_screen.NAV_HOME_VALUE)
-    assert home_screen.is_present(accessibility_id=home_screen.NAV_MORE)
+    """All five bottom-nav destinations exist.
+
+    Resolved by resource-id, not by the content-desc these used to use: a content-desc
+    is localized, so those locators would stop resolving in ar/ru/zh — three of the
+    app's four shipped locales. Home is included now that it is addressable by id;
+    it was previously unreachable by label because the selected tab exposes no
+    clickable content-desc.
+    """
+    for name in ("NAV_HOME", "NAV_PROPERTIES", "NAV_TRANSACTIONS",
+                 "NAV_HOME_VALUE", "NAV_MORE"):
+        resource_id = getattr(home_screen, name)
+        assert home_screen.is_present(resource_id=resource_id), (
+            f"bottom-nav {name} ({resource_id}) not present on Home"
+        )
 
 
 def test_bottom_nav_properties_opens_results(home_screen):

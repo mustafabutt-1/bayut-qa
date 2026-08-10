@@ -784,7 +784,7 @@ appended to `.env.example`.
 
 | Placeholder used above | Role / where used |
 |---|---|
-| `TEST_ACCOUNT_PORTFOLIO_EMAIL` / `_PASSWORD` | "demo@sectorlabs.ro" — Leads Verification test portfolio account; reused in TruBroker/Find My Agent as "Demo@sectorlabs.ro" |
+| `TEST_ACCOUNT_PORTFOLIO_EMAIL` / `_PASSWORD` | <.env: TEST_ACCOUNT_PORTFOLIO_EMAIL> — Leads Verification test portfolio account; reused in TruBroker/Find My Agent as <.env: TEST_ACCOUNT_PORTFOLIO_EMAIL> |
 | `TEST_ACCOUNT_ADMIN1_EMAIL` / `_PASSWORD` | Admin Claims — "sectorlabs-automation+agent@sectorlabs.ro" |
 | `TEST_ACCOUNT_ADMIN2_EMAIL` / `_PASSWORD` | Admin Claims — "sectorlabs-automation+trubrokeragent@sectorlabs.ro" |
 | `TEST_ACCOUNT_AGENT1_EMAIL` / `_PASSWORD` | Admin Claims — "sectorlabs-automation+slmihaie2e@sectorlabs.ro" |

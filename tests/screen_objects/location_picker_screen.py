@@ -32,10 +32,41 @@ class LocationPickerScreen(BaseScreen):
         return PropertiesResultsScreen(self.driver, self.safety_policy, self.timeout)
 
     def select_location(self, name: str):
-        """Confirmed live (ported suite) for both an exact Popular-Locations chip
-        (e.g. "Dubai") and a sub-location not in that list (e.g. "Business Bay") —
-        both resolve to a plain tap-by-text once the picker is open."""
-        self.safe_tap(text=name)
+        """Select a location, typing to find it when it is not already on screen.
+
+        A plain tap-by-text only works for something already rendered — a Popular chip,
+        or a sub-location that happens to be visible. The sanctioned test location
+        ("Al Napoca") is neither: it has to be typed into the picker's search field
+        before any result exists to tap. Falling straight to `safe_tap(text=...)`
+        produced a bare "element not found" that read as a broken locator rather than
+        "you never searched for it".
+
+        Typing goes through `mobile: shell`, not `send_keys` — same reason as
+        find_my_agent_hub_screen.search() (D-019/D-026): Appium's own text entry does
+        not reliably trigger this app's search-as-you-type listeners.
+        """
+        if self.is_present(resource_id=self.POPULAR_LOCATION_CHIP, text=name, timeout=2):
+            self.safe_tap_row_containing(self.POPULAR_LOCATION_CHIP, name)
+            return
+
+        self.safe_tap(resource_id=self.SEARCH_INPUT)
+        self.driver.execute_script("mobile: shell", {
+            "command": "input",
+            "args": ["text", name.replace(" ", "%s")],
+            "includeStderr": True,
+            "timeout": 5000,
+        })
+        assert self.is_present(resource_id=self.POPULAR_LOCATION_CHIP, text=name,
+                               timeout=15), (
+            f"typed {name!r} into the location search but no suggestion row with that "
+            f"exact title appeared within 15s. Either the location does not exist in "
+            f"this environment, or the search-as-you-type listener did not fire (check "
+            f"the Appium server was started with --allow-insecure=uiautomator2:adb_shell)."
+        )
+        # Deliberately NOT safe_tap(text=name): after typing, `et_input` also carries
+        # this text and is itself clickable, so a plain text match taps the search box
+        # instead of the suggestion. Match the labelled row via its clickable parent.
+        self.safe_tap_row_containing(self.POPULAR_LOCATION_CHIP, name)
 
     def confirm(self):
         """Only "Done" (tv_done) is present here in practice, no keyboard-IME

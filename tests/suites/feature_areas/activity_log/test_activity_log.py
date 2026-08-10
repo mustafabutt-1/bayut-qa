@@ -28,17 +28,23 @@ def _open_activity_log(home_screen):
 def test_all_three_activity_tabs_present(home_screen):
     """Checklist item 1 — the three tabs exist on Your Activity."""
     activity = _open_activity_log(home_screen)
-    labels = activity.visible_tab_labels()
-    print(f"\n  tabs observed: {labels}")
+    # Wait for the screen before reading it. safe_tap returns as soon as it clicks, so
+    # reading page source immediately can catch the Activity Log mid-inflate, with the
+    # RadioGroup not yet attached — which reads as "all three tabs missing" rather than
+    # "not loaded yet". Waiting on the group is the difference between a real finding
+    # and a race.
+    assert activity.is_displayed(), (
+        "Activity Log did not open — rg_activity_log never appeared"
+    )
 
-    normalised = {"".join(l.lower().split()) for l in labels}
-    expected = ("Recent Searches", "Viewed", "Contacted")
-    missing = [e for e in expected if "".join(e.lower().split()) not in normalised]
+    present = activity.present_tab_ids()
+    print(f"\n  tab labels (reporting only)  : {activity.visible_tab_labels()}")
+    print(f"  tabs resolved by resource-id : {present}")
 
+    missing = [name for name, ok in present.items() if not ok]
     assert not missing, (
-        f"Activity Log is missing tab(s): {missing}. Observed: {labels}. "
-        f"If a tab was merely renamed, fix ActivityLogScreen — that is a TEST DEFECT, "
-        f"not an app defect."
+        f"Activity Log is missing tab(s): {missing}. Resolved by resource-id "
+        f"({activity.TAB_IDS}) — so this is not a wording change, the control is absent."
     )
 
 

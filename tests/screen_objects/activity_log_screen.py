@@ -10,12 +10,14 @@ class ActivityLogScreen(BaseScreen):
     CONTACTED_TAB = "com.bayut.bayutapp:id/contacted_rb"
     BACK = "com.bayut.bayutapp:id/back_btn"
 
-    # The Recent Searches tab's resource-id has never been observed here — the crawl's
-    # page-source dumps are gitignored, and the live session only needed Viewed and
-    # Contacted. Matched on text until a run reports the real id.
-    # [UNVERIFIED — replace with the resource-id, likely `recent_searches_rb` by the
-    #  naming pattern of its two siblings, but NOT confirmed, so not hardcoded.]
-    RECENT_TAB_TEXT = "Recent Searches"
+    # OBSERVED 2026-08-10, build 15.7.2 (1272): the three tabs are a RadioGroup
+    # (rg_activity_log) of searches_rb / viewed_rb / contacted_rb. Note the id is
+    # `searches_rb`, NOT the `recent_searches_rb` the sibling naming pattern suggested —
+    # which is exactly why it was left as a text match until a real run reported it.
+    RECENT_TAB = "com.bayut.bayutapp:id/searches_rb"
+    TAB_GROUP = "com.bayut.bayutapp:id/rg_activity_log"
+    TITLE = "com.bayut.bayutapp:id/tv_activity"           # "Your Activity"
+    RECENT_SEARCHES_LIST = "com.bayut.bayutapp:id/rv_recent_searches"
 
     # Card anatomy inside Viewed / Contacted, per the checklist. Reuses the ids already
     # proven on the LPV fat card, which is the same component.
@@ -28,19 +30,35 @@ class ActivityLogScreen(BaseScreen):
     def open_contacted_tab(self):
         self.safe_tap(resource_id=self.CONTACTED_TAB)
 
+    def is_displayed(self, timeout: int = 10) -> bool:
+        return self.is_present(resource_id=self.TAB_GROUP, timeout=timeout)
+
     def open_recent_searches_tab(self):
-        self.safe_tap(text=self.RECENT_TAB_TEXT)
+        self.safe_tap(resource_id=self.RECENT_TAB)
+
+    #: The three documented tabs, by resource-id. Identity is the id; the label is only
+    #: ever read as a value for reporting, never used to find the element.
+    TAB_IDS: dict[str, str] = {
+        "Recent Searches": RECENT_TAB,
+        "Viewed": VIEWED_TAB,
+        "Contacted": CONTACTED_TAB,
+    }
+
+    def present_tab_ids(self) -> dict[str, bool]:
+        """Which documented tabs exist, keyed by name, resolved purely by resource-id."""
+        present = {e.resource_id for e in self.current_elements() if e.resource_id}
+        return {name: rid in present for name, rid in self.TAB_IDS.items()}
 
     def visible_tab_labels(self) -> list[str]:
-        """Every tab label currently on the Activity Log header, in left-to-right order.
+        """The tabs' visible labels, left to right — for reporting only.
 
-        Read from the screen rather than assumed, so a renamed or removed tab shows up
-        as a real finding instead of a locator miss.
+        Elements are located by resource-id; the text is read afterwards as a value. A
+        localized build returns different strings here and that is fine, because nothing
+        asserts on them — `present_tab_ids()` is what the tests check.
         """
         tabs = [e for e in self.current_elements()
-                if e.bounds and (e.text or e.content_desc)
-                and (e.klass.endswith("RadioButton") or e.resource_id.endswith("_rb"))]
-        return [(e.text or e.content_desc).strip()
+                if e.resource_id in self.TAB_IDS.values() and e.bounds]
+        return [(e.text or e.content_desc or e.resource_id.rsplit("/", 1)[-1]).strip()
                 for e in sorted(tabs, key=lambda e: e.bounds[0])]
 
     def card_count(self) -> int:
