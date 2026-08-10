@@ -194,8 +194,19 @@ DEFAULT_BLOCK_RULES: tuple[Rule, ...] = (
     Rule(
         "BLOCK-LEAD-CONTACT", "lead_contact",
         "Any contact / enquiry affordance reaches a real agent.",
-        any_field=r"\b(contact\w*|enquir\w*|inquir\w*|request\s*(info\w*|details|callback)|"
-                  r"get\s*in\s*touch)\b|تواصل|استفسار|طلب\s*معلومات",
+        # (?!ed) excludes the past participle only. NOTE: it is `(?!ed)` and not
+        # `(?!ed\b)` — in the raw resource-id `contacted_rb` the "ed" is followed by an
+        # underscore, which is a word character, so `ed\b` never holds there and the
+        # exclusion silently did nothing. Caught by the selftest case below.
+        # "Contacted" is a *history label* —
+        # the Activity Log tab listing properties you already contacted, and the fat-card
+        # "Contacted" badge — never a control that reaches an agent. You tap "Contact" to
+        # contact someone; "Contacted" is a read-only filter over what already happened.
+        # Same narrowing shape as D-025's (?<!with[ _]) for "Continue with Email".
+        # Everything else stays unconditional: contact, contacts, contacting, Contact Us.
+        any_field=r"\bcontact(?!ed)\w*|\b(enquir\w*|inquir\w*|"
+                  r"request\s*(info\w*|details|callback)|get\s*in\s*touch)\b"
+                  r"|تواصل|استفسار|طلب\s*معلومات",
     ),
     Rule(
         "BLOCK-LEAD-VIEWING", "lead_contact",
@@ -646,6 +657,9 @@ _MUST_BLOCK: tuple[tuple[str, str], ...] = (
     ("text", "Send Message"),
     ("text", "Contact Agent"),
     ("text", "Contact Us"),
+    ("text", "Contact"),
+    ("text", "Contacting agent"),
+    ("resource_id", "com.bayut.bayutapp:id/btn_contact_agent"),
     ("text", "Enquire Now"),
     ("text", "Request Callback"),
     ("text", "Book a Viewing"),
@@ -707,6 +721,12 @@ _MUST_NOT_BLOCK: tuple[tuple[str, str], ...] = (
     # selector, not a lead-contact action.
     ("text", "Continue with Email"),
     ("resource_id", "com.bayut.app:id/fl_continue_with_email"),
+    # The Activity Log "Contacted" tab and the fat-card "Contacted" badge are history
+    # labels over what already happened — not controls that reach an agent. Caught by
+    # `contact\w*` before the (?!ed) narrowing; would have refused open_contacted_tab().
+    ("text", "Contacted"),
+    ("resource_id", "com.bayut.bayutapp:id/contacted_rb"),
+    ("text", "Viewed and Contacted"),
 )
 
 

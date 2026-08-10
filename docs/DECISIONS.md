@@ -629,3 +629,19 @@ discipline. Evidence gained a `lead_agency_verified` field, so every consequenti
 in `runs/consequential-evidence/log.jsonl` records which agency was confirmed on screen
 at the moment of the tap. Classification targets the element by resource-id per D-024 and
 D-034; the tag check is the deliberate backstop for when a driver call fails mid-flow.
+
+### D-039 · 2026-08-10 · BLOCK-LEAD-CONTACT false-positived on "Contacted"
+**Decision.** `BLOCK-LEAD-CONTACT` narrowed from `contact\w*` to `contact(?!ed)\w*`.
+**Rationale.** "Contacted" is a *history label* — the Activity Log tab listing properties
+already contacted, and the fat-card badge — never a control that reaches an agent. You tap
+"Contact" to contact someone; "Contacted" is a read-only filter over what already
+happened. The guard was refusing `contacted_rb`, so `ActivityLogScreen.open_contacted_tab()`
+could never have worked; it had simply never been exercised, since only the Viewed tab was
+used live. Same shape as D-025's "Continue with Email".
+**Consequence.** Two attempts were needed and the first was wrong in an instructive way:
+`(?!ed)` looked correct but did nothing, because in the raw resource-id `contacted_rb`
+the "ed" is followed by an underscore — a word character — so `ed` never holds and the
+lookahead always passed. Only the word-normalised candidate would have been excluded, and
+the raw one matched first. `(?!ed)` is the fix. Six selftest cases now pin both directions:
+Contacted / contacted_rb / "Viewed and Contacted" must NOT block; Contact / Contact Agent /
+Contacting agent / Contact Us / btn_contact_agent must. 119 -> 125 assertions.
