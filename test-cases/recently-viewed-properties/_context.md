@@ -27,6 +27,16 @@ tracks what came back.
 
 ## How
 
+**Every CSV the QA team hands over is read in full before anything is done with
+it** — the original 78-case baseline, and any future replacement or supplementary
+CSV, gets opened and read end to end, not sampled from the header row or the first
+few cases and generalized from there. This is the same "evidence over inference"
+discipline the automated agent pipeline enforces (CLAUDE.md hard rule) applied to
+this manual workstream: a case count, a section list, or a "this looks fine" verdict
+is only as good as whether every row was actually read, and the two data-integrity
+bugs below were only caught because re-reads happened, not because the tooling
+guaranteed correctness on its own.
+
 **The review comments are being applied incrementally to a JSON working file, not
 to the CSV directly**, and the CSV is *not* being re-exported after every comment —
 the QA team is working through the suite case-by-case and asked explicitly not to
