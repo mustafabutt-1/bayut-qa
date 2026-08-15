@@ -101,3 +101,48 @@ def deliberate_tap(driver, web_element, *, reason: str, evidence_tag: str,
             "lead_agency_verified": agency_seen,
         }) + "\n")
     web_element.click()
+
+
+def deliberate_tap_at(driver, x: int, y: int, *, reason: str, evidence_tag: str) -> None:
+    """Same evidence discipline as `deliberate_tap()` — non-empty reason required,
+    screenshot and log entry before every tap — but a real W3C coordinate touch
+    instead of `.click()`.
+
+    For controls CONFIRMED LIVE (D-031) not to respond to a synthetic accessibility
+    click at all: `favourite_cb` reports `clickable="true"` and `.click()` returns
+    successfully, but the app's real favourite state never changes. A genuine touch at
+    the same coordinates does work. `PROD-BLOCK-FAVOURITE` correctly refuses this
+    control now (see docs/DECISIONS.md), so any test that legitimately needs to
+    favourite something to prove a checklist requirement — §20 Favourites, §3 app
+    override persistence — does it here, deliberately, evidenced, opt-in only, not
+    through `safe_tap()`.
+
+    No lead-authorisation check here — favouriting isn't a lead_contact action, it's
+    `data_creation`. Callers that also need the lead gate should use `deliberate_tap()`
+    for that control instead."""
+    if not reason.strip():
+        raise ValueError("deliberate_tap_at requires a non-empty reason — every call "
+                          "site must justify itself, not just tap")
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = time.time()
+    shot_path = EVIDENCE_DIR / f"{int(timestamp)}-{evidence_tag}.png"
+    driver.get_screenshot_as_file(str(shot_path))
+    with open(EVIDENCE_DIR / "log.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "tag": evidence_tag, "reason": reason,
+            "screenshot": str(shot_path), "at": timestamp,
+            "mechanism": "coordinate_tap (D-031 — .click() confirmed non-functional "
+                         "for this control)",
+        }) + "\n")
+
+    from selenium.webdriver.common.actions.action_builder import ActionBuilder
+    from selenium.webdriver.common.actions.pointer_input import PointerInput
+    from selenium.webdriver.common.actions import interaction
+
+    finger = PointerInput(interaction.POINTER_TOUCH, "finger")
+    actions = ActionBuilder(driver, mouse=finger)
+    actions.pointer_action.move_to_location(x, y)
+    actions.pointer_action.pointer_down()
+    actions.pointer_action.pause(0.1)
+    actions.pointer_action.release()
+    actions.perform()

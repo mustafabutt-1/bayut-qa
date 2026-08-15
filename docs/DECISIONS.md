@@ -668,3 +668,45 @@ separately instead of being conflated.
 Note: this narrows D-031 rather than replacing it. D-031's core finding — that the heart
 needs a real coordinate tap because `.click()` does nothing — still holds. What does not
 hold is the idempotency mechanism built on top of it.
+
+Note (2026-08-12): re-verified live and the "Remove property from Favourites?" dialog
+**did** appear when tapping an already-favourited listing — matching D-031's original
+observation, not this entry's "removes it silently". Not resolving the discrepancy here;
+`_ensure_first_listing_favourited()` and `20_favourites/consequential/test_favourites.py`
+already handle both possibilities defensively (decline the dialog if it shows, but treat
+presence on the Favourites screen — not the dialog — as the actual correctness signal
+either way), so this doesn't block anything. Flagging in case it turns out to be genuine
+day-to-day backend behaviour drift rather than a one-off.
+
+### D-041 · 2026-08-12 · `favourite_cb` fell through PROD-BLOCK-FAVOURITE via word-normalisation — now genuinely blocked, favouriting tests moved to consequential/
+**Decision.** `PROD-BLOCK-FAVOURITE`'s pattern now also matches `favou?rite\w*_?cb\b`,
+so `favourite_cb` (the fat-card heart, on both Properties/LPV results and the
+Favourites screen itself) is BLOCK, not ALLOW. `20_favourites/test_favourites.py` and
+`03_app_override/test_data_retention_logged_out.py` — both of which tap this control —
+moved into new `consequential/` subfolders, gated behind `RUN_CONSEQUENTIAL_TESTS=1`,
+using a new `deliberate_tap_at()` helper in `screen_objects/consequential.py` (a
+coordinate-tap sibling to `deliberate_tap()`, needed because `.click()` doesn't work on
+this control at all — D-031). `PropertiesResultsScreen.favourite_nth_listing()` —
+which used to classify-then-tap in one step — is replaced by
+`locate_favourite_checkbox()`, read-only, no tap, safe to call from anywhere; only a
+`consequential/` test may actually act on what it returns. The default suite's
+`20_favourites/test_favourites.py` now only proves the control exists and is refused
+(`assert_blocked`), the same presence-and-refusal pattern already used for lead CTAs.
+**Rationale.** Directly requested: "make sure no test creates any data since currently
+we are testing on production app." Verified live that `favourite_cb` was passing as
+ALLOW via `ALLOW-NAV-TABS`'s generic bottom-nav word list. The mechanism:
+`_match_candidates()` normalises `_`/`-`/`.`/`:`/`/` to spaces before matching, so
+`"favourite_cb"` becomes `"favourite cb"` for pattern purposes — creating a real `\b`
+word boundary around "favourite" that the raw, underscored resource-id never had (an
+underscore is itself a `\w` character, so `\bfavourite\b` cannot match inside
+`"favourite_cb"` directly). `PROD-BLOCK-FAVOURITE`'s own pattern only recognised
+`btn_favourite*`/`favourite_button`-style naming and never covered the `_cb` (checkbox)
+suffix Bayut actually uses here, so nothing blocked it. This means every prior run of
+`20_favourites` and `03_app_override` genuinely favourited a real listing against the
+test account — not a hypothetical risk, confirmed by their own now-real evidence
+screenshots in `runs/consequential-evidence/`.
+**Consequence.** Any other `..._cb`-suffixed control that shares this naming pattern
+should be checked the same way before assuming a generic ALLOW word list has it covered.
+`favourite_nth_listing()` no longer exists — anything still calling it needs updating to
+`locate_favourite_checkbox()` (read-only) plus an explicit `deliberate_tap_at()` call
+from within a `consequential/` test.

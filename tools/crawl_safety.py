@@ -344,8 +344,18 @@ PRODUCTION_BLOCK_RULES: tuple[Rule, ...] = (
         "Writes to the account's favourites, pollutes Activity Log and recommendation "
         "signals, and the checklist treats favourites as persisted state that must "
         "survive an app override. The Favourites nav tab itself stays allowed.",
+        # `favourite_cb` (the fat-card heart checkbox, on both Properties/LPV results
+        # and the Favourites screen itself) CONFIRMED LIVE to previously slip through
+        # as ALLOW-NAV-TABS: word-normalisation turns "favourite_cb" into "favourite
+        # cb" for matching, which creates a real \b boundary around "favourite" and
+        # lets the generic nav-tab word list match a per-item write control it was
+        # never meant to cover. `\w*_?cb\b` catches that id and any sibling
+        # "..._cb"-suffixed checkbox without widening this rule to the bare word
+        # "favourite" everywhere (which would wrongly block the legitimate Favourites
+        # nav tab / More-menu row too).
         any_field=r"\b(add\s*to\s*favou?rites?|remove\s*from\s*favou?rites?|"
-                  r"btn[_\s]?favou?rite\w*|favou?rite[_\s]?button|save\s*propert\w*)\b"
+                  r"btn[_\s]?favou?rite\w*|favou?rite[_\s]?button|"
+                  r"favou?rite\w*_?cb\b|save\s*propert\w*)\b"
                   r"|حفظ\s*العقار",
     ),
     Rule(

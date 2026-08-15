@@ -1,5 +1,12 @@
 """§3 App override / data retention — docs/REGRESSION-CHECKLIST.md, logged-out half only.
 
+CONSEQUENTIAL, opt-in only — moved here from the default suite because proving
+"favourites survive a relaunch" requires first creating a real favourite
+(`PROD-BLOCK-FAVOURITE`, docs/GUARDRAILS.md), the same reasoning
+`20_favourites/consequential/test_favourites.py` already documents. Uses
+`deliberate_tap_at()`, not `.click()` — confirmed (D-031) `.click()` has no effect on
+this control at all.
+
 **What this actually tests, and what it doesn't.** The checklist means installing a new
 APK *build* over the existing one and checking local data survives the upgrade. This
 suite has no second build to install — there is only ever one Bayut build on the test
@@ -21,12 +28,23 @@ all yet. Both are UNKNOWN, not silently assumed passing.
 The logged-in half of this checklist item (user stays logged in, Saved Searches,
 Alerts) is intentionally not in this file — it additionally exercises the sign-in
 consequential flow and belongs with that, not bundled into a plain data-retention check.
+
+Requires RUN_CONSEQUENTIAL_TESTS=1 to run at all — a real environment check, not just a
+folder/marker convention, so `pytest tests/` alone can never trigger this.
 """
 from __future__ import annotations
 
 import os
 
 import pytest
+
+from screen_objects.consequential import deliberate_tap_at
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_CONSEQUENTIAL_TESTS") != "1",
+    reason="Consequential test (favourites a real listing against the test account). "
+           "Set RUN_CONSEQUENTIAL_TESTS=1 to run deliberately.",
+)
 
 
 def _ensure_first_listing_favourited(properties_screen, home_screen) -> str:
@@ -36,9 +54,9 @@ def _ensure_first_listing_favourited(properties_screen, home_screen) -> str:
 
       * `favourite_cb.checked` stays False whether or not the listing is favourited
         (D-031, re-confirmed 2026-08-11), so there is nothing on the card to inspect.
-      * `favourite_nth_listing()` relies on a "Remove property from Favourites?" dialog
-        to detect the already-favourited case. OBSERVED 2026-08-11: **that dialog does
-        not appear.** Tapping an already-favourited listing removes it silently.
+      * Tapping an already-favourited listing shows a "Remove property from
+        Favourites?" confirmation instead — decline it (`btn_no`) and retry against
+        the next listing, rather than silently removing an earlier run's favourite.
 
     So a single tap on a listing left favourited by an earlier run REMOVES it, and the
     persistence assertion then fails for a reason that has nothing to do with
@@ -49,9 +67,27 @@ def _ensure_first_listing_favourited(properties_screen, home_screen) -> str:
     Verifying here also sharpens the test: it now separately establishes "the favourite
     was recorded" and "it survived the relaunch", instead of conflating the two.
     """
+    driver = home_screen.driver
     for attempt in (1, 2):
-        price = properties_screen.favourite_nth_listing(0)
+        price, center = properties_screen.locate_favourite_checkbox(0)
         assert price is not None, "could not read the listing's price to cross-check"
+
+        deliberate_tap_at(
+            driver, *center,
+            reason=f"§3 App override: favourite the first listing ({price!r}) to prove "
+                   f"it survives a kill+relaunch",
+            evidence_tag="app-override-favourite",
+        )
+
+        if properties_screen.is_present(text="Remove property from Favourites?", timeout=2):
+            properties_screen.safe_tap(resource_id="com.bayut.bayutapp:id/btn_no")
+            assert attempt == 1, (
+                f"favourited the first listing ({price!r}) twice and it still shows "
+                f"the removal-confirmation dialog — the heart is toggling but nothing "
+                f"useful is happening; that's a real finding, not a test-setup problem"
+            )
+            properties_screen = home_screen.open_properties()
+            continue
 
         favourites = home_screen.open_more().open_favourites()
         favourites.wait_for_first_card(timeout=20)
@@ -69,8 +105,6 @@ def _ensure_first_listing_favourited(properties_screen, home_screen) -> str:
             f"Favourites screen. The heart is toggling but nothing is being recorded — "
             f"that is a real finding, not a test-setup problem."
         )
-        # The tap removed it (it was already favourited). Return to results and re-tap.
-        # Safe from More — unlike Favourites, More has the bottom nav.
         assert more_again.is_displayed(), "expected to be back on More after Favourites"
         properties_screen = home_screen.open_properties()
     raise AssertionError("unreachable")
@@ -90,10 +124,6 @@ def test_favourites_and_viewed_activity_persist_across_relaunch(properties_scree
     # wherever the app actually is. Re-navigate before reading anything from it.
     properties_screen = home_screen.open_properties()
 
-    # Read the price from favourite_nth_listing()'s own return value, not a separate
-    # first_listing_price() call beforehand — confirmed live: production's result
-    # order can shift between two separate page_source reads, which previously made
-    # this test favourite one listing while cross-checking the price of another.
     price = _ensure_first_listing_favourited(properties_screen, home_screen)
     properties_screen = home_screen.open_properties()
 
@@ -120,8 +150,8 @@ def test_favourites_and_viewed_activity_persist_across_relaunch(properties_scree
     # Longer than wait_for_first_card()'s normal 10s default — OBSERVED 2026-08-10:
     # right after a cold terminate_app+activate_app, this screen's network fetch takes
     # noticeably longer than a plain in-session navigation to it (20_favourites/
-    # test_favourites.py's warm-session case is fine with the default). Not a retention
-    # bug — confirmed live the data was there, just slower to arrive.
+    # consequential/test_favourites.py's warm-session case is fine with the default).
+    # Not a retention bug — confirmed live the data was there, just slower to arrive.
     favourites.wait_for_first_card(timeout=25)
     assert favourites.is_present(text=price, timeout=10), (
         f"expected the favourited listing (price {price!r}) to still be present on "

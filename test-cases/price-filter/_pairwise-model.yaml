@@ -1,0 +1,45 @@
+# Scoped pairwise model — Price Filter only.
+#
+# Deliberately NOT the full 14-parameter core-search block from
+# context/filter-inventory.md. A price-filter array does not need auth_state ×
+# sort_order; including them inflates the array without testing the price filter.
+#
+# Parameter choice is a judgement call (which dimensions plausibly interact with price);
+# the covering array over them is not — that is tools/pairwise.py's job (D-003).
+#
+# Regenerate with:
+#   python tools/pairwise.py generate --input test-cases/price-filter/_pairwise-model.yaml --strength 2
+
+parameters:
+  # Purpose changes the meaning of the price range entirely (filter-inventory.md F6).
+  purpose:          [Buy, Rent]
+
+  # Rent frequency reinterprets the same numeric range (per year vs per night).
+  rent_frequency:   [Yearly, Monthly, Weekly, Daily, "N/A"]
+
+  # none     = untouched (min 0 / max "Any", the observed defaults)
+  # low/mid/high = a real band
+  # inverted = min > max, the negative case
+  # zero_max = max explicitly 0, boundary case
+  price_band:       [none, low, mid, high, inverted, zero_max]
+
+  # F25: "Currency switch must not silently re-scale the filter [ASSUMED — verify]".
+  # The sheet renders its currency in selection_title_currency, observed as "(AED)".
+  currency:         [AED, USD]
+
+  # F27: RTL layout + Arabic-Indic numerals in a numeric EditText is a real defect class.
+  locale:           [en, ar]
+
+  # Both entry points are OBSERVED — see _feature.md. They reach different UI:
+  # the quick-filter chip opens PriceRangeSheet; the full sheet renders price inline.
+  entry_point:      [quick_filter_chip, full_filters_sheet]
+
+constraints:
+  # Carried over verbatim from context/filter-inventory.md §2 (C1/C2) so the two models
+  # cannot disagree about what a valid combination is.
+  - id: C1
+    rule: "rent_frequency is only meaningful when purpose == Rent"
+    expr: "purpose == 'Rent' or rent_frequency == 'N/A'"
+  - id: C2
+    rule: "rent_frequency must not be N/A when purpose == Rent"
+    expr: "purpose != 'Rent' or rent_frequency != 'N/A'"

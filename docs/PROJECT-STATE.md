@@ -27,6 +27,7 @@ All five context tools run end-to-end with no device, against `tests/fixtures/`.
 | `tools/adb.py` | 684 | `--dry-run` across every subcommand |
 | `tools/crawler.py` | 925 | `offline` mode → all 7 reports generated |
 | `tools/prober.py` | 767 | `selftest` — **28/28 assertions** |
+| `tools/pairwise.py` | 694 | `selftest` — **24/24 assertions**, incl. brute-force coverage verification, determinism, and the real `filter-inventory.md` model |
 
 Reproduce all of it in about 20 seconds:
 
@@ -50,7 +51,6 @@ touching a device.
 
 | Item | Status | Blocked by |
 |---|---|---|
-| `tools/pairwise.py` | not started | nothing — can be built today |
 | `tools/testmo_client.py` | not started | nothing — needs a Testmo token to test live |
 | `tools/clickup_client.py` | not started | nothing — read-only by construction (D-004) |
 | `tools/evidence.py` | not started | nothing — takes fixture paths |

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from selenium.common.exceptions import TimeoutException
 
-from .base import BaseScreen, SafetyRefusal, tappable
+from .base import BaseScreen, tappable
 
 
 class PropertiesResultsScreen(BaseScreen):
@@ -239,31 +239,25 @@ class PropertiesResultsScreen(BaseScreen):
         els = [e for e in self.current_elements() if e.resource_id == self.PRICE_TV]
         return els[0].text if els else None
 
-    def favourite_nth_listing(self, index: int = 0) -> str | None:
-        """§20 Favourites — the heart/checkbox on a listing fat card. `favourite_cb`
-        matches ALLOW-NAV-TABS ("favou?rites?"); classified through the gate like every
-        other tap, one card among several sharing the resource-id, picked by index.
+    def locate_favourite_checkbox(self, index: int = 0) -> tuple[str | None, tuple[int, int]]:
+        """§20 Favourites — locate the heart/checkbox on a listing fat card, one card
+        among several sharing the resource-id, picked by index. Read-only: finds the
+        element and returns its price and tap-point center, but never taps it.
 
-        Tapped via `tap_at()`, not `.click()` — confirmed live (D-031): this control
-        reports `clickable="true"` but its `checked`/`selected` attributes never
-        change and `.click()` silently has no effect on the app's real favourite
-        state. A genuine coordinate touch does work.
+        `favourite_cb` is `PROD-BLOCK-FAVOURITE` — favouriting writes real account
+        data, so this deliberately does not call `safe_tap()` or classify-then-tap
+        itself. A test that genuinely needs to favourite something to prove a
+        checklist requirement does so explicitly via `deliberate_tap_at()` in a
+        `consequential/` test, using the coordinates returned here — not this method,
+        and not `screen_objects/`, which may never import `consequential.py`.
 
-        Idempotency can't be read from the checkbox's own attributes (they never
-        reflect state — see above), so it's detected from a real behavioural signal
-        instead: tapping an ALREADY-favourited listing triggers a "Remove property
-        from Favourites?" confirmation (only on removal, never on addition). If that
-        dialog appears, this method declines it (taps "No") and returns — the
-        listing stays favourited exactly as it already was, which is what "ensure
-        this is favourited" should do, not silently remove it.
-
-        Returns the price of the listing acted on, read from the same page_source
+        Returns the price of the listing at `index`, read from the same page_source
         snapshot used to locate the checkbox — not a separate first_listing_price()
         call beforehand. Confirmed live: production's result order can shift between
         two page_source reads even a few seconds apart (D-007's "live inventory
-        mutates" risk), so a caller reading the price first and favouriting by index
+        mutates" risk), so a caller reading the price first and locating the checkbox
         second can end up cross-checking against a different listing than the one
-        actually favourited."""
+        actually acted on."""
         elements = self.current_elements()
         candidates = [el for el in tappable(elements, include_nested=True)
                       if el.resource_id == self.FAVOURITE_CHECKBOX]
@@ -274,16 +268,6 @@ class PropertiesResultsScreen(BaseScreen):
         prices = [el for el in elements if el.resource_id == self.PRICE_TV]
         price = prices[index].text if len(prices) > index else None
 
-        allowed, decision = self.safety_policy.may_tap(target)
-        if decision.verdict != "ALLOW":
-            raise SafetyRefusal(
-                f"refusing to tap {target.label!r}: safety verdict {decision.verdict} "
-                f"({decision.rule_id or 'no matching rule'})"
-            )
         center = target.center
         assert center is not None, f"favourite checkbox at index {index} has no usable bounds"
-        self.tap_at(*center)
-
-        if self.is_present(text="Remove property from Favourites?", timeout=2):
-            self.safe_tap(resource_id="com.bayut.bayutapp:id/btn_no")
-        return price
+        return price, center

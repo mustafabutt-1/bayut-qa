@@ -14,8 +14,38 @@ listed below so nobody assumes a missing file means a forgotten requirement.
 | Agent | File | What it does |
 |---|---|---|
 | **app-cartographer** | [`app-cartographer.md`](app-cartographer.md) | Builds the context pack by driving the live app. **PASSIVE** mode crawls and inventories screens, elements and accessibility ids. **PROBE** mode manipulates filters and reads result counts to determine behavioural rules. Runs before Phase 1 and re-runs per build to detect drift. |
+| **feature-test-designer** | [`feature-test-designer.md`](feature-test-designer.md) | Turns a feature name / ticket / screen into a BDD case set under `test-cases/<slug>/`. Establishes the feature's mapping state from `context/`, enumerates entry points from the screen graph, probes what the app can answer, and calls `tools/pairwise.py` for combinatorial coverage. **Writes and revises; never self-approves.** |
+| **test-case-auditor** | [`test-case-auditor.md`](test-case-auditor.md) | Judges a case set without seeing the writer's reasoning. Opens every cited source to check it says what the case claims. Emits a machine-readable verdict to `_audit.md`. **Judges only; never edits cases.** |
 
 `app-cartographer` is the only agent that writes to `context/`. Everything else reads it.
+
+### The write–audit–revise loop
+
+`feature-test-designer` and `test-case-auditor` are a **pair**, not two independent
+agents. A single-pass generator produces plausible-looking cases with subtly wrong
+expected results, and nobody notices until the suite has been running a month.
+
+```
+writer produces → auditor judges → FAIL? writer revises by item id → re-audit
+```
+
+Termination is bounded, and enforced in both specs:
+
+- **Max 3 cycles.** Cycle 3 without a `PASS` → `verdict: ESCALATE`, a human decides.
+- **The writer may dispute** a blocking item with counter-evidence and mark it
+  `DISPUTED` — that escalates immediately, no further cycles. Auditors are wrong
+  sometimes, and a writer that silently obeys a wrong objection corrupts the case set.
+- **No new scenarios during revision** unless a blocking item demands one. Revision
+  cycles that grow the case set never converge.
+- Every cycle is logged to `_audit-history.md`, so a *pattern* of failures across
+  features is visible — and a recurring pattern is a fix to the agent spec, not to the
+  individual case set.
+
+**Reference run:** [`test-cases/price-filter/`](../../test-cases/price-filter/) — a real
+two-cycle loop. Cycle 1 `FAIL` on 5 blocking items (including two scenarios citing a
+probe `P6` that does not exist, with a fabricated date and build number); cycle 2
+`PASS_WITH_NOTES`. `_audit-history.md` records both, plus the two spec fixes the loop
+surfaced about itself.
 
 ---
 
@@ -26,7 +56,7 @@ listed below so nobody assumes a missing file means a forgotten requirement.
 | Agent | Input → Output |
 |---|---|
 | `requirements-adversary` | ClickUp ticket + AC + Figma → ambiguities, missing states, error/empty/offline cases, RTL implications, test charter |
-| `test-designer` | charter + `filter-inventory.md` → calls `pairwise.py` for the covering array → drafts cases with expected results → pushes to Testmo as **drafts** |
+| `test-designer` | charter + `filter-inventory.md` → calls `pairwise.py` for the covering array → drafts cases with expected results → pushes to Testmo as **drafts**. **Largely superseded by `feature-test-designer` + `test-case-auditor` above**, which cover everything except the Testmo push. What remains unbuilt is the push itself, which needs `tools/testmo_client.py`. Reconcile the two rather than building a third generator. |
 
 ### Build
 
