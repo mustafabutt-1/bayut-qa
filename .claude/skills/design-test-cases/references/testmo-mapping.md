@@ -54,6 +54,17 @@ Never upload one app's suite into another app's project. Confirm the project ID 
 | Notes | — | Review aid; not uploaded |
 | Testmo Case ID | — | Filled *after* upload, as a record. **Not** a sync link |
 
+### Configurations column — confirmed present, at least on some projects
+
+A live CSV re-export from a Bayut UAE Testmo project (2026-08) included a fifth column,
+`Configurations`, holding a platform tag (`iOS` or `Android`) on device-specific cases —
+alongside Case ID / Case / Description / Expected. This is not yet documented in the
+upload JSON schema below and its write path via the API hasn't been verified the way the
+facts above have. Where it's confirmed present on the target project, prefer it for
+platform-scoping a case over only stating the platform in prose — it's structured data a
+run view can filter on. Confirm on the target project before relying on it; do not
+assume every project exposes it.
+
 ### How clauses map
 
 | Clause | `text3` |

@@ -151,3 +151,24 @@ Regression builds must run **Production configs across the board** (APIs, Fireba
 **Rule:** Refer to the rotating promotional widget at the top of the Bayut UAE homepage as "Homepage banners" — never "promotional banner carousel". It surfaces TruEstimate, Portfolio, Dubai Transactions, Propco, TruBroker and other entry points; see Section B/D.
 **Why:** The QA team's own vocabulary is "Homepage banners" — an invented term drifts from how the team actually talks about the surface, the same failure mode `context/checklist-corrections.md` documents for the sister automation project's SRP/LDP-vs-LPV/DPV mixup.
 **Example:** Not "the section is rendered directly below the homepage promotional banner carousel" but "...directly below the Homepage banners carousel".
+
+## UAE-002 — `recently_viewed_carousel_homepage` confirmed Remote Config contract
+**Date:** 2026-08-16
+**Captured from:** QA lead, direct spec confirmation during Recently Viewed Properties Testmo review (Mustafa)
+**Rule:** The Remote Config key `recently_viewed_carousel_homepage` has three defined values, each with a confirmed effect:
+| Value | Home screen | Activity Log (More screen) |
+| --- | --- | --- |
+| `recently_viewed_control` | Recently Viewed Properties section **not shown** | Viewed Properties section **shown** |
+| `recently_viewed_variant` | Recently Viewed Properties section **shown** | Viewed Properties section **shown** |
+| `null` | Recently Viewed Properties section **not shown** | Viewed Properties section **shown** |
+
+`null` and `recently_viewed_control` are behaviourally identical on both surfaces — `null` is not a distinct third UI state, just an unresolved-config case that degrades to the same behaviour as `control`.
+**Why:** Removes ambiguity from every Recently Viewed case's `Given`/`Then` clauses for this key — no case needs to hedge on what `null` does anymore.
+**Note:** This confirms the *visibility* contract per bucket. It does **not** resolve the separate, still-open question of how many properties a user must view before the Home section activates (the "1 view vs 3 views" contradiction tracked in `test-cases/recently-viewed-properties/modified-cases.md`) — that's an activation threshold, not a bucket-visibility rule, and remains unconfirmed.
+
+## UAE-003 — Recently Viewed / Activity Log history is device-local storage, not account-synced
+**Date:** 2026-08-16
+**Captured from:** QA lead, direct confirmation during Recently Viewed Properties Testmo review (Mustafa)
+**Rule:** Viewing history (Home carousel + Activity Log "Viewed Properties") is stored in the app's local storage on-device, not synced server-side to the account.
+**Why:** Explains and ties together the retention behavior across several cases in this suite: survives an override install (§3 of the regression checklist — local storage isn't touched by an override) and survives an account switch on the same device (case 47 — the history belongs to the device, not the signed-in account), but is wiped by a full uninstall/reinstall (case 46 — uninstall clears local storage).
+**Caution:** Don't assume this generalises to *other* local data (Favourites, Saved Searches, etc.) without separate confirmation — this fact is specifically about viewing history, not a blanket statement about everything the app stores locally.

@@ -16,8 +16,12 @@ listed below so nobody assumes a missing file means a forgotten requirement.
 | **app-cartographer** | [`app-cartographer.md`](app-cartographer.md) | Builds the context pack by driving the live app. **PASSIVE** mode crawls and inventories screens, elements and accessibility ids. **PROBE** mode manipulates filters and reads result counts to determine behavioural rules. Runs before Phase 1 and re-runs per build to detect drift. |
 | **feature-test-designer** | [`feature-test-designer.md`](feature-test-designer.md) | Turns a feature name / ticket / screen into a BDD case set under `test-cases/<slug>/`. Establishes the feature's mapping state from `context/`, enumerates entry points from the screen graph, probes what the app can answer, and calls `tools/pairwise.py` for combinatorial coverage. **Writes and revises; never self-approves.** |
 | **test-case-auditor** | [`test-case-auditor.md`](test-case-auditor.md) | Judges a case set without seeing the writer's reasoning. Opens every cited source to check it says what the case claims. Emits a machine-readable verdict to `_audit.md`. **Judges only; never edits cases.** |
+| **testmo-suite-designer** | [`testmo-suite-designer.md`](testmo-suite-designer.md) | A separate lineage from the three above — wraps the `design-test-cases` skill (manual Testmo suites, not this repo's automated BDD suites). DESIGN mode builds a suite from a PRD/Figma/remote-config/tracking-sheet mix; REVIEW mode takes an existing Testmo suite through a live reviewer-comment cycle, case by case, and can trim/consolidate it afterward. Grew out of a real 82-case Bayut UAE review cycle; the comment-triage and reduction discipline it follows lives in `design-test-cases/references/reviewing-existing-suites.md`. **Never uploads to Testmo.** |
 
 `app-cartographer` is the only agent that writes to `context/`. Everything else reads it.
+`testmo-suite-designer` writes to the `design-test-cases` skill's app knowledge bases via
+`update-knowledge`, not to `context/` — it works one layer above the app-crawl pipeline
+the other three agents share.
 
 ### The write–audit–revise loop
 

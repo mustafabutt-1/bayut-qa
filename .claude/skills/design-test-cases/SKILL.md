@@ -1,6 +1,6 @@
 ---
 name: design-test-cases
-description: Designs a complete manual test case suite for a new or modified feature in any of the group's native iOS and Android apps — Bayut UAE, Bayut KSA, Bayut Egypt, Bayut GCC, Dubizzle Egypt, Dubizzle GCC, Zameen PK, OLX PK, or Hatla2ee — working from whatever raw inputs exist, whether a BRD, a ticket, Figma links, an events or tracking sheet, or pasted conversation, and optionally uploads the finished suite to Testmo. Use this skill whenever someone asks for test cases, a test suite, test scenarios, QA coverage, a test plan, or a testing checklist for a mobile app feature, and also when they paste a ticket description, BRD, or requirements doc and ask what to test or what QA should cover. Use it even when the request is casual ("what should we test for this?") or when only a ticket link is supplied. Do not use it for web app test cases or for writing automation code.
+description: Designs a complete manual test case suite for a new or modified feature in any of the group's native iOS and Android apps — Bayut UAE, Bayut KSA, Bayut Egypt, Bayut GCC, Dubizzle Egypt, Dubizzle GCC, Zameen PK, OLX PK, or Hatla2ee — working from whatever raw inputs exist, whether a BRD, a ticket, Figma links, an events or tracking sheet, or pasted conversation, and optionally uploads the finished suite to Testmo. Also handles the review side of the same work: taking an existing Testmo suite through a live reviewer-comment cycle, case by case, applying corrections, flagging ambiguity, and trimming the suite afterward. Use this skill whenever someone asks for test cases, a test suite, test scenarios, QA coverage, a test plan, or a testing checklist for a mobile app feature; when they paste a ticket description, BRD, or requirements doc and ask what to test; or when they paste an existing case plus reviewer comments and ask for the case to be updated. Use it even when the request is casual ("what should we test for this?") or when only a ticket link is supplied. Do not use it for web app test cases or for writing automation code.
 ---
 
 # Designing mobile app test cases
@@ -8,6 +8,13 @@ description: Designs a complete manual test case suite for a new or modified fea
 This skill produces manual test cases for the group's native iOS and Android apps, in the house style the QA team uses in Testmo. It is for mobile only — never produce web-specific cases (browser compatibility, responsive breakpoints, cross-browser rendering).
 
 The workflow is the same for every app. What differs per app — languages, screen vocabulary, device matrix, deeplink domains, Testmo project — lives in an app knowledge base, loaded in Phase 0.
+
+**Two different jobs share this skill.** Phases 0–9 below are for designing a suite from
+nothing. If a suite already exists in Testmo and the task is applying live reviewer
+comments to it case by case, or trimming/consolidating an existing suite — a different
+shape of work with its own failure modes — go to
+`references/reviewing-existing-suites.md` instead. It assumes the house style and
+knowledge-base conventions below; it doesn't repeat them.
 
 ## Before you start
 
@@ -17,7 +24,7 @@ Read these three files, in this order. They are short and they change how you wr
 2. `references/common-scenarios.md` — the mandatory cross-cutting scenarios that go into every suite.
 3. `references/learnings.md` — accumulated group-wide corrections. These override the other two where they conflict, because they are the most recent thinking.
 
-Read `references/testmo-mapping.md` only at the upload step, and the app knowledge base in Phase 0.
+Read `references/testmo-mapping.md` only at the upload step, and the app knowledge base in Phase 0. Read `references/reviewing-existing-suites.md` only when the task is reviewing an existing suite, not designing a new one — see above.
 
 ## Phase 0 — Identify the app and load its knowledge base
 

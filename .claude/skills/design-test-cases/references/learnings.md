@@ -17,6 +17,31 @@ Do not edit or delete past entries. If a rule is superseded, add a new entry tha
 
 ---
 
+## L-013 — Check for a bucket-forcing mechanism before writing a single case for an A/B feature
+**Date:** 2026-08-17
+**Captured from:** Recently Viewed Properties review (Bayut UAE)
+**Rule:** When a feature is gated by an A/B experiment, before writing any case whose `Given` assumes a specific bucket, confirm there is a documented way to force a test account into that bucket. If there isn't, don't write 80 cases that all silently assume it — flag the gap once, up front.
+**Why:** In this suite, every one of ~80 cases opened with "Given the test user is assigned to the `X` experiment group," and no case, comment, or doc anywhere stated how a tester actually gets into that state. Found only on a full-suite audit at the end, by which point it was a systemic finding instead of a five-minute check at the start.
+
+## L-012 — A suite pulled twice mid-review is how you catch "applied" vs. "actually applied"
+**Date:** 2026-08-17
+**Captured from:** Recently Viewed Properties review (Bayut UAE)
+**Rule:** When told a batch of fixes has been applied to a live Testmo suite, re-pull the export and diff it against what was actually requested — don't take a verbal "done" at face value when case content matters.
+**Why:** In this cycle, one fix landed with a duplicated line instead of a clean replacement, and a separate agreed case retirement never actually happened, despite both being reported as complete. Neither would have been caught without re-pulling and reading the actual export.
+
+## L-011 — Recognise premise reversal before editing a case
+**Date:** 2026-08-17
+**Captured from:** Recently Viewed Properties review (Bayut UAE)
+**Rule:** When a review comment contradicts a case's core `Then` rather than refining it, rewrite the whole scenario. Patching the disputed clause alone leaves every downstream clause built on the now-false premise unchanged and wrong.
+**Why:** Two cases in this cycle had comments stating the exact opposite of what the case asserted (a sign-in gate that didn't actually exist; a cached carousel shown offline when actually a message replaces it entirely). Editing just the flagged line would have left the rest of the scenario internally inconsistent.
+**Example:** See `reviewing-existing-suites.md`'s "Recognise a premise reversal" section for the full before/after.
+
+## L-010 — Ambiguous review comments get flagged back, not resolved by pattern-matching the last similar one
+**Date:** 2026-08-17
+**Captured from:** Recently Viewed Properties review (Bayut UAE)
+**Rule:** An ambiguous comment ("this line doesn't make sense," no replacement given) is not resolved by guessing based on how a similarly-worded comment was handled elsewhere. Check whether the confirmed-fact base already settles it; if it doesn't, ask, and say plainly which reading you'd default to and why — but don't silently commit to one in the case text.
+**Why:** This is `L-009` sharpened by a specific failure mode: two comments in the same review thread used near-identical wording ("this doesn't make sense") for two different underlying problems, and the same fix would have been wrong for at least one of them. Full methodology in `reviewing-existing-suites.md`.
+
 ## L-005 — Every case carries three fields
 **Date:** 2026-07-26
 **Captured from:** Testmo field mapping requirement
