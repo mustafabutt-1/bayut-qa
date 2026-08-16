@@ -19,6 +19,7 @@ its independence from the dev codebase is the point, not a limitation.
 | understand how and why it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | know why something was decided | [docs/DECISIONS.md](docs/DECISIONS.md) |
 | see which agents exist | [.claude/agents/README.md](.claude/agents/README.md) |
+| write or review a manual Testmo suite | [docs/TESTMO-SUITE-DESIGNER.md](docs/TESTMO-SUITE-DESIGNER.md) |
 
 If you are Claude Code opening this repo: `CLAUDE.md` loads automatically, then read
 `docs/PROJECT-STATE.md` before doing anything. **Do not infer project status from the
